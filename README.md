@@ -2,6 +2,13 @@ HKU CS PhD Thesis Sample
 ======================
 > This repo contains the LaTex files used for building my PhD thesis. The LaTex template is borrowed from the Cambridge University Engineering Department (CUED) PhD Thesis Template.
 
+Title: Single View Analysis of Non-Lambertian Objects Based on Deep Learning  
+Author: Guanying Chen  
+The University of Hong Kong, Pokfulam, Hong Kong, 2020.
+
+## Sample Pages
+The compiled PDF can be found in [https://guanyingc.github.io/papers/Chen_HKU_PhD_Thesis_2020.pdf](https://guanyingc.github.io/papers/Chen_HKU_PhD_Thesis_2020.pdf).
+
 <p align="center">
     <img src='images/thesis1.jpg' width="400" >
     <img src='images/thesis2.jpg' width="400" >
