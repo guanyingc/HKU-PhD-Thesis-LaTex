@@ -1,0 +1,516 @@
+\newcommand{\GCNetname}{Guided Calibration Network\xspace}
+\newcommand{\gcnetname}{guided calibration network\xspace}
+\newcommand{\gcnetacronymnospace}{GCNet}
+\newcommand{\gcnetacronym}{\gcnetacronymnospace\xspace}
+\newcommand{\gbr}{GBR\xspace}
+\newcommand{\LCNetreg}{LCNet$_\text{reg}$\xspace}
+
+\chapter{Learning Lighting Calibration for Photometric Stereo}
+\label{ch:lcnet}
+
+\section{Introduction}
+Photometric stereo aims at recovering the surface normal of a static object from a set of images captured under different light directions~\cite{woodham1980ps,silver1980determining}. \emph{Calibrated} photometric stereo methods assume known light directions, and promising results have been reported~\cite{shi2019benchmark} at the cost of tedious light source calibration. The problem of \emph{uncalibrated} photometric stereo, where light directions are unknown, still remains an open challenge, and its stable solution is wanted because of the ease of setting. In this chapter, we study the problem of uncalibrated photometric stereo for surfaces with general and unknown isotropic reflectance.
+
+Most of the existing methods for uncalibrated photometric stereo~\cite{alldrin2007r,shi2010self,papad14closed} assume a simplified reflectance model, such as the Lambertian model, and focus on resolving the shape-light ambiguity, such as the Generalized Bas-Relief (GBR) ambiguity~\cite{belhumeur1999bas}. Although methods of~\cite{lu2013uncalibrated,lu2015uncalibrated} can handle surfaces with general bidirectional reflectance distribution functions (BRDFs), they rely on a uniform distribution of light directions for deriving a solution.
+
+Recently, with the great success of deep learning in various computer vision tasks, deep learning based methods have been introduced to calibrated photometric stereo~\cite{santo2017deep,Taniai18,ikehata2018cnn,chen2018ps}. Instead of explicitly modeling complex surface reflectances, they directly learn the mapping from reflectance observations to surface normals given light directions. Although they have produced promising results in a calibrated setting, they cannot handle the more challenging problem of \emph{uncalibrated} photometric stereo, where light directions and intensities are unknown. One simple strategy to handle uncalibrated photometric stereo with deep learning is to directly learn the mapping from images to surface normals without taking the light directions as input. 
+However, as reported in~\Sref{sub:upsfcn}, the performance of such a model lags far behind those which take both images and light directions as input.
+
+Instead of directly predicting surface normals from images, we propose to first estimate light directions and intensities from images. The problem of uncalibrated photometric stereo can then be reduced to a calibrated one, which can be effectively solved by existing calibrated methods~\cite{shi2014bi,chen2018ps,ikehata2018cnn}.
+The rationales behind this two-stage approach are as follows. First, lighting information is very important for normal estimation since lighting is the source of various cues, such as shading and reflectance, and estimating the light directions ($3$-vectors) and intensities (scalars) is in principle much easier than directly estimating the normal map (a $3$-vector at each pixel location) together with the lighting conditions. 
+Second, by explicitly learning to estimate light directions and intensities, the model can take advantage of the intermediate supervision by the ground-truth lighting, resulting in a more interpretable behavior. 
+
+This work focuses on learning lighting calibration for uncalibrated photometric stereo. The contributions of this work can be summarized as follows:
+\begin{itemize}
+    \item We introduce a lighting calibration network, named LCNet, for estimating light directions and intensities from images.
+    \item We discuss the differences between LCNet and traditional uncalibrated methods, and analyze the features learned by LCNet to resolve the \gbr ambiguity.
+    \item We find that attached shadows, shadings, and specular highlights are key elements for lighting estimation, and that LCNet extracts features independently from each input image without exploiting any inter-image information (``inter-image'' means information shared by all images).
+    \item Based on our findings, we propose a \gcnetname (\gcnetacronym) that explicitly utilizes object shape and shading information as guidances for better lighting estimation.
+\end{itemize}
+
+Preliminary results of this research have been published in~\cite{chen2019self,chen2020chen_gcnet}.
+Our code and models can be found at \url{https://guanyingc.github.io/SDPS-Net}.
+
+\section{Related Work}
+\label{sec:lcnet_relatedwork}
+In this section, we review uncalibrated photometric stereo methods and the loosely related work on learning based lighting estimation. Review for recent deep calibrated photometric stereo methods can be found in~\Sref{sec:psfcn_related_work}.
+
+\paragraph{Uncalibrated photometric stereo}
+When lighting is unknown, the surface normals of a Lambertian object can only be estimated up to a $3\times 3$ linear ambiguity~\cite{hayakawa1994photometric}, which can be reduced to a $3$-parameter GBR ambiguity~\cite{belhumeur1999bas,yuille1999determining} using the surface integrability constraint. Previous work used additional clues like albedo priors~\cite{alldrin2007r,shi2010self}, inter-reflections~\cite{chandraker2005reflections}, specular spikes~\cite{drbohlav2005can}, Torrance and Sparrow reflectance model~\cite{georghiades2003incorporating}, reflectance symmetry~\cite{tan2007isotropy,wu2013calib}, multi-view images~\cite{esteban2008multiview}, and local diffuse maxima~\cite{papad14closed}, to resolve the GBR ambiguity. Cho~\etal~\cite{cho2016photometric} considered a semi-calibrated case where the light directions are known but not their intensities. There are few works that can handle non-Lambertian surfaces under unknown lighting. Hertzmann and Seitz~\cite{hertzmann2005example} proposed an exemplar based method by inserting an additional reference object to the scene. Methods based on cues like similarity in radiance changes~\cite{sato2007shape,lu2013uncalibrated} and attached shadow~\cite{okabe2009attached} were also introduced, but they require the light sources to be uniformly distributed on the entire viewing sphere. Recently, Lu~\etal~\cite{lu2018symps} introduced a method based on the ``constrained half-vector symmetry'' to work with non-uniform lightings. Different from these traditional methods, our method can deal with surfaces with general and unknown isotropic reflectance without the need of explicitly utilizing any additional clues or reference objects, solving a complex optimization problem at test time, or making assumptions on the light source distribution. 
+
+Other methods related to uncalibrated photometric stereo include exemplar-based methods~\cite{hertzmann2005example}, regression-based methods~\cite{midorikawa2016uncalibrated}, semi-calibrated photometric stereo~\cite{cho2018semi}, inaccurate lighting refinement~\cite{queau2017non}, and photometric stereo under general lighting~\cite{basri2007photometric,mo2018uncalibrated,haefner2019variational}.
+
+\paragraph{Learning based lighting estimation}
+Recently, learning based single-image lighting estimation methods have attracted considerable attention. Gardner~\etal~\cite{gardner2017learning} introduced a CNN for estimating HDR environment lighting from an indoor scene image. Hold-Goeffroy~\etal~\cite{hold2017deep} learned outdoor lighting using a physically-based sky model. Weber~\etal~\cite{weber2018learning} estimated indoor environment lighting from an image of an object with known shape. Zhou~\etal~\cite{Zhou_2018_CVPR} estimated lighting, in the form of Spherical Harmonics, from a human face image by assuming a Lambertian reflectance model. Different from the above methods, our method can estimate accurate directional lightings from multiple images of a static object with general shape and non-Lambertian surface.
+
+\section{Lighting Calibration Network (LCNet)}
+\label{sec:lcnet}
+In the rest of this chapter, we refer to light direction and intensity as ``lighting''.
+To estimate lighting from the images, an intuitive approach would be directly regressing the light direction vectors and intensity values.
+However, we propose that formulating the lighting estimation as a classification problem is a superior choice, as will be verified by our experiments. Our arguments are as follows. First, classifying a light direction into a certain range is easier than regressing the exact value(s), and this will reduce the learning difficulty. 
+Second, when training a normal estimation network, taking discretized light directions as input will allow it to better tolerate small errors in the estimated light directions.
+
+\begin{figure}[htbp] \centering
+    \input{ch-lcnet/figures/spherical_coord2}
+    \raisebox{0.05\height}{\includegraphics[width=0.28\textwidth]{ch-lcnet/images/Method/hemisphere.pdf}} \\ \vspace{-0.9em} 
+    \makebox[0.28\textwidth]{\small (a)} 
+    \makebox[0.28\textwidth]{\small (b)} \\
+    \caption[Illustration of an example discretization of the lighting space]{(a) Illustration of the coordinate system ($z$ axis is the viewing direction). $\phi \in [0\degree, 180\degree]$ and $\theta \in [-90\degree, 90\degree]$ are the azimuth and elevation of the light direction, respectively. (b) Example discretization of the light direction space when $K_d=18$.} \label{fig:coord}
+\end{figure}
+
+\subsection{Discretization of Lighting Space} Since we cast our lighting estimation as a classification problem, we need to discretize the continuous lighting space. Note that a light direction in the upper-hemisphere can be described by its azimuth $\phi \in [0\degree, 180\degree]$ and elevation $\theta \in [-90\degree, 90\degree]$ (see \fref{fig:coord}~(a)). We can discretize the light direction space by evenly dividing both the azimuth and elevation into $K_d$ bins, resulting in $K_d^2$ classes (see \fref{fig:coord}~(b)). Solving a $K_d^2$-class classification problem is not computationally efficient, as the softmax probability vector will have a very high dimension even when $K_d$ is not large (\eg, $K_d^2=1,296$ when $K_d=36$). 
+Instead, we estimate the azimuth and elevation of a light direction separately, leading to two $K_d$-class classification problems. Similarly, we evenly divide the range of possible light intensities into $K_e$ classes (\eg, $K_e=20$ for a possible light intensity range of $[0.2, 2.0]$).
+
+\begin{figure}[htbp] \centering
+	\includegraphics[width=1\textwidth]{ch-gcnet/images/Method/LCNet.pdf}
+    \caption[Network architecture of LCNet]{Network architecture of LCNet. Each layer's value indicates its output channel number.} \label{fig:LCNet}
+\end{figure}
+
+\subsection{Local-global Feature Fusion}
+A straightforward approach to estimate the lighting for each image is simply taking a single image as input, encoding it into a feature map using a CNN, and feeding the feature map to a lighting prediction layer. It is not surprising that the result of such a simple solution is far from satisfactory. Note that the appearance of an object is determined by its surface geometry, reflectance model and the lighting. The feature map extracted from a single observation obviously does not provide sufficient information for resolving the shape-light ambiguity. Thanks to the nature of photometric stereo where multiple observations of an object are considered, we propose a local-global feature fusion strategy to extract more comprehensive information from multiple observations.
+
+Specifically, we separately feed each image into a shared-weight feature extractor to extract a feature map, which we call \emph{local feature} as it only provides information from a single observation. All local features of the input images are then aggregated into a \emph{global feature} through a max-pooling operation, which has been proven to be efficient and robust on aggregating salient features from a varying number of unordered inputs~\cite{wiles2017silnet,chen2018ps}. Such a global feature is expected to convey implicit surface geometry and reflectance information of the object which help resolve the ambiguity in lighting estimation. Each local feature is concatenated with the global feature, and fed to a shared-weight lighting estimation sub-network to predict the lighting for each individual image. By taking both local and global features into account, our model can produce much more reliable results than using the local features alone. We empirically found that additionally including the object mask as input can effectively improve the performance of lighting estimation, as will be seen in the experiment section.
+
+\subsection{Network Architecture}
+LCNet is a multi-input-multi-output (MIMO) network that consists of a shared-weight \emph{feature extractor}, an \emph{aggregation layer} (\ie, max-pooling layer), and a shared-weight \emph{lighting estimation sub-network} (see \fref{fig:LCNet}). 
+It takes the observations of the object together with the object mask as input, and outputs the light directions and intensities in the form of softmax probability vectors of dimension $K_d$ (azimuth), $K_d$ (elevation) and $K_e$ (intensity), respectively. 
+We convert the output of LCNet to $3$-vector light directions and scalar intensity values by simply taking the middle value of the range with the highest probability. We have experimentally verified that alternative ways like taking the expectation of the probability vector or performing quadratic interpolation in the neighborhood of the peak value do not improve the result.
+
+\paragraph{Loss function}
+Multi-class cross entropy loss is adopted for both light direction and intensity estimation, and the overall loss function is
+\begin{align}
+    \label{eq:cls_loss}
+    \mathcal{L}_{\text{Light}} & = \lambda_{l_a} \mathcal{L}_{l_a} + \lambda_{l_e} \mathcal{L}_{l_e} + \lambda_e \mathcal{L}_e,
+\end{align}
+where $\mathcal{L}_{l_a}$ and $\mathcal{L}_{l_e}$ are the loss terms for azimuth and elevation of the light direction, and $\mathcal{L}_e$ is the loss term for light intensity. 
+For example, given $F$ input images,
+\begin{align}
+    \label{eq:cls_detail_loss}
+    \mathcal{L}_{l_a}=-\frac{1}{F} \sum_{f=1}^{F} \sum_{i=1}^{K_d} \{y_{i}^f=1\} \log(p_i^f),
+\end{align}
+where $\{\cdot\}$ is a binary indicator (0 or 1) function, $y_i^f$ is the ground-truth label ($0$ or $1$) and $p_i^f$ is the predicted probability for bin $i$ ($K_d$ bins in our case) for the $f$\textsuperscript{th} image. Detailed definition of other loss terms are similar to \eref{eq:cls_detail_loss}.
+During training, weights $\lambda_{l_a}$, $\lambda_{l_e}$, and $\lambda_e$ for the loss terms are set to $1$.
+
+
+\subsection{Training Data}
+We adopted the synthetic Blobby and Sculpture datasets introduced in~\Sref{sec:psfcn_dataset} for training.
+Blobby and Sculpture datasets provide surfaces with complex normal distributions and diverse materials from MERL dataset~\cite{matusik2003merl}. Effects of cast shadow and inter-reflection were considered during rendering using the physically based raytracer Mitsuba~\cite{jakob2010mitsuba}. There are $85,212$ samples in total. Each sample was rendered under $64$ distinct light directions sampled from the upper-hemisphere with uniform light intensity, resulting in $5,453,568$ images ($85,212 \times 64$). The rendered images have a dimension of $128\times 128$.
+
+To simulate images under different light intensities, we randomly generated light intensities in the range of $[0.2, 2.0]$ to scale the magnitude of the images (\ie, the ratio of the highest light intensity to the lowest one is $10$)\footnote{Note that the ratio (other than the exact value) matters, since light intensity can only be estimated up to a scale factor.}. Note that this selected range contains a wider range of intensity value than the public photometric stereo datasets like \diligent~\cite{shi2019benchmark} and \gourd~\cite{alldrin2008p}. The color intensities of the input images were normalized to the range of $[0, 1]$. 
+During training, we applied noise perturbation in the range of $[-0.025, 0.025]$ for data augmentation, and the input image size for LCNet was $128\times 128$. At test time, the input for LCNet is rescaled to $128\times 128$ as it contains fully-connected layers and requires the input to have a fixed spatial dimension. Trained only on the synthetic dataset, we will show that our model can generalize well on real datasets.
+
+\paragraph{Implementation details}
+Our method was implemented in PyTorch~\cite{paszke2017pytorch} and Adam optimizer~\cite{kingma2014adam} was used with default parameters. LCNet contains $4.4$ million parameters.
+We trained LCNet using a batch size of $32$ for $20$ epochs, and the learning rate was initially set to $0.0005$ and halved every $5$ epochs.
+It took about $22$ hours to train LCNet on a single Titan X Pascal GPU with a fixed input image number of $32$.
+
+\subsection{Evaluation of LCNet with Synthetic Data}
+\label{sub:eval_lcnet}
+We evaluate LCNet on the synthetic test dataset \syntestMERL introduced in \Sref{subsec:synth_test_data}.
+To measure the accuracy of the predicted light directions, the widely used mean angular error (MAE) in degree is adopted.
+Since the light intensities among the testing images can only be estimated up to a scale factor $s$, we introduce the scale-invariant relative error (RE)
+\begin{equation}
+    RE_{scale} = \frac{1}{q} \sum_i^q \left(\frac{|s e_i -\tilde{e}_i|}{\tilde{e}_i} \right),
+\end{equation}
+where $q$ is the number of images, $e_i$ and $\tilde{e}_i$ are the estimated and ground-truth light intensities, respectively, for image $i$. The scale factor $s$ is computed by solving \hbox{$\argmin_s \sum_i^n (s e_i -\tilde{e}_i)^2$} with least squares. 
+As the calibrated intensity in the real dataset is in the form of a $3$-vector, we repeat the estimated intensity to form a $3$-vector and calculate the average result.
+
+For all experiments on synthetic dataset involving input with unknown light intensities, we randomly generated light intensities in the range of $[0.2, 2.0]$. Each experiment was repeated five times and the average results were reported.
+
+\paragraph{Discretization of lighting space}
+For a given number of bins $K_d$, the maximum deviation angle for azimuth and elevation of a light direction is $\delta = 180\degree/(K_d\times 2)$ after discretization (\eg, $\delta=2.5\degree$ when $K_d=36$).
+Note that discretizing azimuth and elevation angles independently indicates that lighting space is more densely discretized around the poles and less around the equator. 
+This suggests that the link between the quantization of the lighting space and surface normal estimation error correlates with the lighting distribution.
+To investigate how the light direction discretization affects the surface normal estimation accuracy, we tested PS-FCN on \emphobject{Sphere} and \emphobject{Bunny} rendered under three different lighting distributions, namely, \textit{Near Uniform}, \textit{Around Equator}, and \textit{Around Poles} (see \fref{fig:discretization}~(a)).
+
+We divided the azimuth and elevation angles of light directions into different numbers of bins ranging from $4$ to $180$.
+For a specific bin number, we perturbed the azimuth and elevation of each ground-truth light direction by the maximum deviation angle, leading to four light directions that have the maximum possible angular deviations after discretization (see \fref{fig:discretization}~(b)).
+We then used these light directions as input for PS-FCN to infer surface normals. The normal estimation error reported in \fref{fig:discretization} (c) is the upper-bound error for PS-FCN caused by discretization.
+We can see that the error increase caused by discretization is marginal for all three lighting distributions when $K_d\ge30$.
+We chose a relatively sparse discretization of lighting space in this work as it allows PS-FCN to learn to better tolerate small errors in the estimated lighting at test time.
+
+\begin{figure}[tbp] \centering
+    \input{ch-lcnet/figures/res_discretization_v2}
+    \caption[Results of LCNet under different light direction space discretization levels]{(a) Three different lighting distributions. (b) Light directions $A$, $B$, $C$, and $D$ have the maximum deviation angles with the actual light direction $P$ after discretization. (c) Normal estimation error of PS-FCN on \emphobject{Sphere} (solid lines) and \emphobject{Bunny} (dashed lines) under different light direction space discretization levels ($\infty$ indicates no discretization).} \label{fig:discretization}
+\end{figure}
+
+\paragraph{Effectiveness of LCNet}
+We first investigated the effect of object mask input and local-global feature fusion.
+\Tref{tab:quant_light_synth} shows that taking the object mask as input and adopting the proposed local-global feature fusion strategy can effectively improve the lighting estimation results.
+This might be explained by that object mask helps the network distinguish the shadow region from the non-object region, while the proposed local-global feature fusion strategy can effectively make use of information from multiple observations. 
+
+\begin{table}[tbp] \centering
+    \caption[Lighting estimation results of LCNet on \syntestMERL dataset]{Lighting estimation results (MAE in degree for light direction and relative error for intensity) on \syntestMERL dataset. The results are averaged over samples rendered with $100$ BRDFs. (Value the lower the better)}
+    \input{ch-lcnet/tables/res_quant_light_synth_v2} \label{tab:quant_light_synth}
+\end{table}
+
+\begin{table}[tbp] \centering
+    \caption[Results on \emphobject{Sphere} and \emphobject{Bunny} under different lighting distributions]{Results of LCNet and \LCNetreg on \emphobject{Sphere} and \emphobject{Bunny} rendered under different lighting distributions.} \label{tab:quant_light_synth_regression}
+    \input{ch-lcnet/tables/res_quant_light_synth_regression} 
+\end{table}
+
+We then compared LCNet with a regression based baseline, denoted as \LCNetreg, to validate the effectiveness of the classification based model.
+\LCNetreg shares the same architecture with LCNet, except that LCNet$_{\text{reg}}$ estimates a 3-vector for light direction and a scalar value for light intensity, rather than the softmax probability vectors.
+ Given $q$ images, the loss function for the lighting regression is
+ \begin{align}
+     \label{eq:loss_reg}
+     \mathcal{L}_{\text{Reg}} & = \lambda_{l} \frac{1}{q} \sum_{i}^q (1 - \boldsymbol{l}_{i}^\top \tilde{\boldsymbol{l}}_{i} )+ \lambda_{e} \frac{1}{q} \sum_{i}^q (e_{i} - \tilde{e}_{i} )^2,
+ \end{align}
+ where $\lambda_{l}$ and $\lambda_{e}$ are the weighting factors for the loss terms, $\boldsymbol{l}_{i}$ ($e_{i}$) and $\tilde{\boldsymbol{l}}_{i}$ ($\tilde{e}_{i}$) denote the predicted light direction (intensity) and the ground truth, respectively, for image $i$. During training, $\lambda_{l}$ and $\lambda_{e}$ are set to 1 (we found that using other weighting factors produce similar results).
+
+
+Specifically, we tested LCNet and \LCNetreg on three different lighting distributions illustrated in \fref{fig:discretization}~(a). The results are shown in \Tref{tab:quant_light_synth_regression}. The proposed classification based LCNet consistently outperforms \LCNetreg on both light direction and intensity estimation. This echoes our hypothesis that classifying a light direction to a certain range is easier than regressing an exact value. Thus, solving the classification problem reduces the learning difficulty and improves the performance.
+It can also be seen that both methods perform better on \textit{Around Equator} and worse on \textit{Around Poles}.
+This suggests that lightings around the poles are more difficult to estimate due to their extremely directions, independent of the lighting space discretization.
+
+\begin{figure}[htbp] \centering
+    \includegraphics[width=0.46\textwidth]{ch-lcnet/images/Results/synth/SDPS-Net_img_sense_direction_img_num_sensitivity.pdf}
+    \includegraphics[width=0.48\textwidth]{ch-lcnet/images/Results/synth/SDPS-Net_img_sense_intensity_img_num_sensitivity.pdf}
+    \\ \vspace{-0.5em}
+    \makebox[0.46\textwidth]{\footnotesize (a) Light direction estimation}
+    \makebox[0.48\textwidth]{\footnotesize (b) Light intensity estimation}\\
+    \caption[Results of LCNet on \syntestMERL dataset with varying image numbers]{Lighting estimation results of LCNet on \syntestMERL dataset with varying input image numbers.} \label{fig:img_num_syn}
+\end{figure}
+
+\Fref{fig:img_num_syn} shows that the performance of LCNet increases with the number of input images. This is expected, since more useful information can be used to infer lightings with more input images.
+
+
+\newcommand{\PSFCNdag}{PS-FCN$^\dag$\xspace}
+
+\paragraph{Integration with PS-FCN for normal estimation}
+For uncalibrated photometric stereo, we train a variant of PS-FCN, denoted as \PSFCNdag, using the lighting estimated by LCNet. 
+Note that the weights of LCNet was fixed during the training of \PSFCNdag, as we found that end-to-end fine-tuning did not improve the performance.  
+Experiments with IDs C1 \& C2 in \Tref{tab:quant_normal_syn} show that after training with the discretized lighting estimated by LCNet, \PSFCNdag performs better than PS-FCN given possibly noisy lightings at test time. Besides, experiments with IDs C2 \& C3 show that \PSFCNdag coupled with the classification based LCNet consistently outperforms that with the regression based \LCNetreg. 
+
+\begin{table}[tbp] \centering
+    \caption[Normal estimation results on \syntestMERL dataset]{Normal estimation results on \syntestMERL dataset. \PSFCNdag was trained given lightings estimated by LCNet or \LCNetreg.} %
+    \input{ch-lcnet/tables/res_quant_normal_synth_shrink} \label{tab:quant_normal_syn}
+\end{table}
+
+
+\paragraph{Comparison with single-stage deep uncalibrated models}
+To validate the effectiveness of the proposed two-stage approach, we compared our method with two different single-stage baseline models.
+We first train a variant of PS-FCN, denoted as UPS-FCN, without taking the light direction as input during training and testing.
+We then increased the model capacity of UPS-FCN by training a deeper network, denoted as UPS-FCN$_{\text{deep+mask}}$, that takes both the images and object mask as input (see \fref{fig:upsfcn_model_variants}). 
+
+\begin{figure}[tbp] \centering
+    \includegraphics[width=\textwidth]{ch-lcnet/images/Method/UPS-FCN_Variants}
+    \caption[Network architectures of UPS-FCN and UPS-FCN$_{\text{deep+mask}}$.]{Network architectures of UPS-FCN (top) and UPS-FCN$_{\text{deep+mask}}$ (bottom).} \label{fig:upsfcn_model_variants}
+\end{figure}
+
+Experiments with IDs C4 \& C5 in \Tref{tab:quant_normal_syn} show that utilizing a deeper network and taking the object mask as input can improve the performance of single-stage model.
+However, experiments with IDs C2 \& C4 show that the proposed method significantly outperforms the single-stage model, when the input as well as the number of parameters are comparable.
+This result indicates that simply increasing the depth of the network cannot produce optimal results. 
+
+
+
+\section{Analyzing What is Learned in LCNet}
+\label{sec:LCNet_analysis}
+\Sref{sub:eval_lcnet} shows that the proposed LCNet can predict accurate lightings for different testing objects. Also, given the lightings estimated by LCNet, the calibrated method PS-FCN significantly outperforms the single-stage uncalibrated method UPS-FCN.
+However, what specifically inside the LCNet contributes to its success remains a mystery.
+
+In this section, we discuss the inherent ambiguity in uncalibrated photometric stereo of Lambertian surfaces, the fact that it can be resolved for non-Lambertian surfaces, and the features learned by LCNet to resolve such ambiguity.
+
+\newcommand{\numpixels}{\ensuremath{P}}
+\newcommand{\pixelindex}{\ensuremath{p}}
+\newcommand{\numlightings}{\ensuremath{F}}
+\newcommand{\lightingindex}{\ensuremath{f}}
+\subsection{Lambertian Surfaces and the \gbr Ambiguity}
+When ignoring shadows (\ie, attached and cast shadows) and inter-reflections, the image formation of a Lambertian surface with $\numpixels$ pixels captured under $\numlightings$ lightings can be written as
+\begin{equation}
+    \V{M} = \V{N}^\top \V{L},
+\end{equation}
+where \hbox{$\V{M} \in \mathbb{R}^{\numpixels \times \numlightings}$} is the measurement matrix. 
+\hbox{$\V{N} \in \mathbb{R}^{3\times \numpixels}$} is the surface normal matrix whose columns are albedo scaled normals \hbox{$\V{N}_{:,\pixelindex}=\rho_\pixelindex\vn_\pixelindex$}, where $\rho_\pixelindex$ and $\vn_\pixelindex$ are the albedo and unit-length surface normal of pixel $\pixelindex$.
+\hbox{$\V{L} \in \mathbb{R}^{3\times \numlightings}$} is the lighting matrix whose columns are intensity scaled light directions $\V{L}_{:,f} = e_f\vl_f$, where $e_f$ and $\vl_f$ are the light intensity and unit-length light direction of image~$f$.
+
+\begin{figure}[htbp] \centering
+	\input{ch-gcnet/figures/sphere_gbr}
+    \caption[Results of PF14 and LCNet on shapes under different GBR transformation]{Row~1 is the true shape of a \emphobject{Sphere}, while rows~2 and~3 are shapes under two different GBR transformations. In column~(c), the points' positions and colors indicate light direction and relative intensity, respectively. Columns (e) and (f) show the lightings estimated by PF14~\cite{papad14closed} and LCNet.}\label{fig:gbr}
+\end{figure}
+    
+By matrix factorization and applying the surface integrability constraint, $\V{N}$ and $\V{L}$ can be recovered up to an unknown $3$-parameter GBR transformation $\V{G}$~\cite{belhumeur1999bas} such that \hbox{$\V{M} = (\V{G}^{-\top}\V{N})^\top (\V{G}\V{L})$}. This GBR ambiguity indicates that there are infinitely many combinations of albedo $\rho$, normal $\vn$, light direction $\vl$, and light intensity~$e$ that produce the same appearance $\V{M}$ (see~\fref{fig:gbr}~(a)-(d)):
+\begin{align}
+    \hat{\rho} \!=\! \rho|\V{G}^{-\top}\vn|,\,\,
+    \hat{\vn} \!=\! \frac{\V{G}^{-\top}\vn}{|\V{G}^{-\top}\vn|},\,\,
+    \hat{\vl} \!=\! \frac{\V{G}\vl}{|\V{G}\vl|},\,\,
+    \hat{e} \!=\! e |\V{G} \vl|.
+\end{align}
+
+Although the surface's appearance remains the same after GBR transformation (\ie, \hbox{$\hat{\rho} \hat{\vn}^{\!\top} \hat{\vl}  \hat{e} \!=\! \rho \vn^\top \vl e$}, see \fref{fig:gbr}~(d)), a surface point's albedo will be scaled by \hbox{$|\V{G}^{-\top} \vn|$}. As a result, the albedo of an object will change gradually and become spatially-varying. 
+Because this
+kind of spatially-varying albedo distribution resulting %
+from \gbr transformations rarely occurs on real world objects, some previous methods make explicit assumptions on the albedo distribution (\eg, constant albedo~\cite{belhumeur1999bas,papad14closed} or low entropy~\cite{alldrin2007r}) to resolve the ambiguity.
+
+PF14~\cite{papad14closed}, a state-of-the-art non-learning uncalibrated method~\cite{shi2019benchmark}, detects Lambertian diffuse reflectance maxima (\ie, image points satisfying $\vn^\top\vl=1$) to estimate $\V{G}$'s $3$ parameters. %
+We will later use it as a non-learning benchmark in our comparative experiments.
+
+
+\subsection{LCNet and the GBR Ambiguity}
+\Fref{fig:gbr}~(e)-(f) compare the results of LCNet and PF14 on surfaces that differ by GBR transformations. 
+Since the input images are the same in all cases, LCNet estimates the same lightings in all cases, namely the most likely lightings for the input images. The same also applies to PF14.
+Although LCNet's result does not exactly equal the lightings for uniform albedo, we note that it learned from the training data that GBR-transformed surfaces are unlikely.
+
+\begin{table}[t] \centering
+    \caption[Results of PF14 and LCNet on a \emphobject{Sphere} rendered with different BRDFs]{Light direction estimation results of PF14~\cite{papad14closed} and LCNet on a \emphobject{Sphere} rendered with different BRDF types. Non-Lambertian BRDFs are taken from the MERL dataset~\cite{matusik2003merl}.} \label{tab:res_sphere_brdfs}
+    \input{ch-gcnet/tables/compare_PF14_MERL_BRDFs_Sphere}
+\end{table}
+
+Although uncalibrated photometric stereo has an intrinsic GBR ambiguity for Lambertian surfaces, it was shown that GBR transformations do not preserve specularities~\cite{belhumeur1999bas,georghiades2003incorporating,drbohlav2005can}. Hence, specularities are helpful for ambiguity-free lighting estimation.
+However, traditional methods often treat non-Lambertian observations as outliers, and thus fail to %
+make full use of specularities for disambiguation~\cite{papad14closed}.
+In contrast, learning-based methods can learn the relation between specular highlights and light directions through end-to-end learning.
+As shown in \Tref{tab:res_sphere_brdfs}, LCNet achieves good results for non-Lambertian surfaces while PF14 completely fails when non-Lambertian observations dominate.
+
+\begin{figure}[htbp]\centering
+	\input{ch-gcnet/figures/feature_visual_v5}
+    \caption[Feature visualization of \hbox{LCNet} on a non-Lambertian \emphobject{Sphere}]{Feature visualization of \hbox{LCNet} on a non-Lambertian \emphobject{Sphere}. \emph{Column~1:}~$5$ of the $96$ input images; \emph{Columns~2--4:}~Specular high\-light centers, attached shadows, and shading rendered from ground truth; \emph{Columns~5--7:}~$3$ of LCNet's $256$ features maps. The last row shows the global features produced by fusing local features with max-pooling. All features are normalized to $[0, 1]$ and color coded.} \label{fig:visualization}
+\end{figure}
+
+\subsection{Feature Analysis for LCNet}
+To analyze the features learned by LCNet, we first visualize the learned local and global features. \Fref{fig:visualization} shows $3$ representative features selected from $256$ feature maps extracted by LCNet from images of a non-Lambertian \emphobject{Sphere} dataset. 
+Comparing \fref{fig:visualization}'s Column 2 with Column 5, Column 3 with Column 6, and Column 4 with Column 7, we can see that some feature maps are highly correlated with attached shadows (regions where the angle $\measuredangle(\vn,\vl)\!\ge\! 90\degree$), shadings ($\vn^{\!\top}\vl$), and specular highlights (regions where $\vn$ is close to the half angle $\vh\!=\!\frac{\vl+\vv}{\abs{\vl+\vv}}$ of $\vl$ and viewing direction $\vv$). 
+As discussed earlier in the related work (\Sref{sec:lcnet_relatedwork}), these provide strong clues for resolving the ambiguity. %
+
+To further verify our observations, we did the following. We computed (a)~attached shadows, (b)~the ``specular components'' (with a bit of concept abuse, we denote $\vh^\top\vn$ as specular component), and (c)~shadings for the synthetic Blobby and Sculpture datasets from their ground-truth light directions and normals.
+We then trained $4$ variants of the LCNet, taking (a), (b), (c), and (a) + (b) + (c), respectively, as input instead of regular images.
+We compared these $4$ variant networks with LCNet (\ie, the network trained with Blobby and Sculpture images) on a synthetic test dataset introduced in \Sref{subsec:synthetic_data}. Similar to LCNet, the variant networks also took the object mask as input.
+\Tref{tab:proxy} shows that the variant models achieve results comparable to or even better than the model trained on regular images. 
+
+\begin{table}[t] \centering
+    \caption[Results of LCNet trained with different inputs]{Light direction estimation results of LCNet trained with different inputs. Values indicate mean angular error in degree.} \label{tab:proxy}
+    \input{ch-gcnet/tables/res_synth_proxy}
+\end{table}
+
+We can see that shadings contribute more than attached shadows and specular components for lighting estimation. 
+This is because shading information actually includes attached shadows (\ie, pixels with a zero value in the shading for synthetic data), and can be considered as an image of an object with uniform albedo (albedo equals to $1$). The uniform albedo constraint is a well-known clue for resolving the GBR ambiguity~\cite{belhumeur1999bas,papad14closed}.
+In practice, attached shadows, shadings, and the specular components are not directly available as input, but this confirms our assumption that they provide strong clues for accurate lighting estimation.
+
+As discussed before, LCNet learns to resolve ambiguity by assuming that a surface with a gradually changing albedo corresponding to \gbr transformations rarely exists. 
+However, we have not observed features apparently related to albedo distribution. We hypothesize that the albedo distribution prior is implicitly employed to restrict the mapping space, since \mbox{LCNet} learns the mapping from extracted features to lightings.
+
+\section{\GCNetname (\gcnetacronym)}
+We have analyzed the features learned by LCNet and discussed how it resolves the ambiguity. In this section, we present the motivations for our \gcnetname (\gcnetacronym) and detail its structure.
+
+\subsection{Guided Feature Extraction}
+\label{sec:guided_feature_extraction}
+As we have seen, features like attached shadows, shadings, and specularities are important for lighting estimation, and a lighting estimation network may benefit greatly from being able to estimate them accurately. 
+We further know that these features are completely determined by the light direction for each image as well as the inter-image shape information derived from the surface normal map.
+However, LCNet extracts features independently from each input image and thus cannot exploit any inter-image information during feature extraction. This observation also indicates that simply increasing the layer number of LCNet's shared-weight feature extractor cannot %
+produce significant improvement.
+
+\paragraph{Surface normal as inter-image guidance}
+Intuitively, if we can provide such inter-image shape information as input to the network to guide the feature extraction process, it should be able to perform better.
+This, however, constitutes a chicken-and-egg problem where we require normals and lightings for accurate feature extraction but at the same time we require these features for estimating accurate lightings. We therefore suggest a cyclic network structure in which
+we first estimate initial lightings, and then use them to estimate normals as inter-image information to guide the extraction of local (\ie, per-image) features to ultimately estimate final lightings. 
+An alternative idea might be directly estimating surface normals from images. %
+However, we have shown in \Tref{fig:upsfcn_model_variants} that surface normals estimated directly from images are not accurate.
+
+\paragraph{Shading as intra-image guidance}
+Another advantage of first estimating initial lighting and surface normals is that we can easily compute coarse attached shadows, shadings, or specular components as intra-image guidance for the feature extraction process (intra-image means the information is different %
+for each image).
+As shading information already includes attached shadows, and not all materials exhibit specular highlights, we only compute the shading for each image as the dot-product of the estimated lighting with the surface normals, and use it as intra-image guidance. 
+We experimentally verified that additionally including the specular component as network input does not improve results.
+The computed shading, on the other hand, does improve results and can assist the network to extract better features.
+
+\begin{figure}[tbp] \centering
+	\includegraphics[width=\textwidth]{ch-gcnet/images/Method/PG-LENet_v2}
+    \caption[Network architecture of \gcnetacronym]{(a) Structure of the lighting estimation sub-network L-Net. (b) Structure of the normal estimation sub-network N-Net. (c)~The entire \mbox{\gcnetacronym}. Values in layers indicate the output channel number.} \label{fig:netname}
+\end{figure}
+
+\subsection{Network Architecture}
+As shown in~\fref{fig:netname}, the proposed \gcnetacronym consists of two lighting estimation sub-networks (L-Net) and a normal estimation sub-network (N-Net).
+The first L-Net, ``L-Net$_1$'', estimates initial lightings given the input images and object masks. 
+The N-Net then estimates surface normals from the lightings estimated by L-Net$_1$ and the input images. 
+Finally, the second L-Net, ``L-Net$_2$'', estimates more accurate lightings based on the input images, object masks, the estimated normals, and the computed shadings.
+
+\paragraph{L-Net} The L-Net is designed based on LCNet but has less channels in the convolutional layers to reduce the model size (see \fref{fig:netname}~(a)).
+Compared to LCNet's $4.4$ million parameters, each L-Net has only \num{1.78} million parameters.
+
+Following LCNet, we discretize the lighting space and treat lighting estimation as a classification problem. 
+Specifically, L-Net's output light direction and intensity are in the form of softmax probability vectors (a $32$-vector for elevation, a $32$-vector for azimuth, and a $20$-vector for intensity).
+Given $\numlightings$ images, the loss function for L-Net is 
+\begin{align}
+    \label{eq:light_loss}
+    \mathcal{L}_{\text{light}} & =  \frac{1}{\numlightings} \sum_\lightingindex(\mathcal{L}^\lightingindex_{l_a} + \mathcal{L}^\lightingindex_{l_e} + \mathcal{L}^\lightingindex_e),
+\end{align}
+where $\mathcal{L}^\lightingindex_{l_a}, \mathcal{L}^\lightingindex_{l_e}$, and $\mathcal{L}^\lightingindex_{e}$ are the cross-entropy loss for light azimuth, elevation, and intensity classifications for the $\lightingindex$\textsuperscript{th} input image, respectively. 
+The output probability vectors can be converted to a $3$-vector light direction $\vl_f$ and a scalar light intensity $e_f$ by taking the probability vector's expectation, which is differentiable for later end-to-end fine-tuning.
+
+L-Net$_1$ and L-Net$_2$ differ in that L-Net$_1$ has $4$ input channels ($3$ for the image, $1$ for the object mask) while L-Net$_2$ has $8$ ($3$ additional channels for normals, $1$ for shading).
+
+\paragraph{N-Net} The N-Net is designed based on PS-FCN~\cite{chen2018ps} but with less channels, resulting in \num{1.1} million parameters compared to PS-FCN's \num{2.2} million parameters (see \fref{fig:netname}~(b) for details). Following PS-FCN, the \mbox{N-Net's} loss function is
+\begin{align}
+    \label{eq:normal_loss}
+    \mathcal{L}_{\text{normal}} = \frac{1}{\numpixels} \sum_{\pixelindex} \left(1 - \vn_\pixelindex^\top \tilde{\vn}_{\pixelindex} \right),
+\end{align}
+where $\numpixels$ is the number of pixels per image, and $\vn_\pixelindex$ and $\tilde{\vn}_\pixelindex$ are the predicted and the ground-truth normal at pixel $\pixelindex$, respectively.
+
+\paragraph{End-to-end fine-tuning}
+We train L-Net$_1$, N-Net, and L-Net$_2$ one after another until convergence and then fine-tune the entire network end-to-end using the following loss
+\begin{align}
+    \label{eq:finetune}
+    \mathcal{L}_{\text{fine-tune}} & = \mathcal{L}_{\text{light}_1} + \mathcal{L}_{\text{normal}} + \mathcal{L}_{\text{shading}} + \mathcal{L}_{\text{light}_2}, \\
+    \mathcal{L}_{\text{shading}} & = \frac{1}{\numlightings\numpixels} \sum_{\lightingindex} \sum_{\pixelindex}(\vn_\pixelindex^\top \vl_\lightingindex - \tilde{\vn}_\pixelindex^\top \tilde{\vl}_\lightingindex)^2,
+\end{align}
+where \hbox{$\mathcal{L}_{\text{light}_1}$} and \hbox{$\mathcal{L}_{\text{light}_2}$} denote the lighting estimation loss for L-Net$_1$ and L-Net$_2$.
+The shading loss term \hbox{$\mathcal{L}_{\text{shading}}$} is included to encourage better shading estimation,
+and $\vl_\lightingindex$ and $\tilde{\vl}_\lightingindex$ denote the light direction predicted by L-Net$_1$ and ground-truth light direction for the $\lightingindex$\textsuperscript{th} image, respectively.
+
+\paragraph{Training details}
+Following LCNet, we trained the networks on the synthetic Blobby and Sculpture Dataset which contains $85,212$ surfaces, each rendered under $64$ random light directions.
+
+First, we train L-Net$_1$ from scratch for $20$ epochs, halving the learning rate every $5$ epochs.
+Second, we train \mbox{N-Net} using ground-truth lightings and input images following PS-FCN's training procedure (see \Sref{sec:psfcn_exp}), and then retrain N-Net given the lightings estimated by L-Net$_1$ for $5$ epochs, halving the learning rate every $2$ epochs.
+Third, we train \mbox{L-Net$_2$} given the input images, object masks, estimated normals, and computed shadings for $20$ epochs, halving the learning rate every $5$ epochs.
+The initial learning rate is $0.0005$ for L-Net$_1$ and L-Net$_2$, and $0.0002$ for retraining N-Net. 
+End-to-end training is done for $20$ epochs with an initial learning rate of $0.0001$, halving it every $5$ epochs.
+
+We implemented our framework in PyTorch~\cite{paszke2017pytorch} and used the Adam optimizer~\cite{kingma2014adam} with default parameters. 
+The full network has a total of \num{4.66} million parameters which is comparable to LCNet (\num{4.4} million).
+The batch size and the input image number for each object are fixed to $32$ during training.
+The input images for all sub-networks are resized to $128\!\times\! 128$ at both training and test time.
+
+\section{Experimental Results}
+We first compare LCNet and \gcnetacronym on the synthetic test dataset \syntestMERL introduced in \Sref{subsec:synth_test_data}, and then compared our methods with existing methods on the publicly available real datasets. Similarly, the widely used mean angular error (MAE) in degree is adopted to measure the accuracy of the predicted light directions and surface normals. The scale-invariant relative error (RE) is used to measure the accuracy of the predicted light intensities (see \Sref{sub:eval_lcnet} for definition). 
+
+For all experiments on synthetic dataset involving input with unknown light intensities, we randomly generated light intensities in the range of $[0.2, 2.0]$. Each experiment was repeated five times and the average results were reported.
+
+\subsection{Evaluation on Synthetic Data}
+\label{subsec:synthetic_data}
+\paragraph{Ablation study}
+To validate the design of the proposed \gcnetacronym, we performed an ablation study and summarized the results in \Tref{tab:synth_test_light}.
+The comparison between experiments with IDs 2-4 verifies that taking both the estimated normals and shading as input is beneficial for lighting estimation.  
+The comparison between experiments with IDs 1 \& 2 demonstrates that end-to-end fine-tuning further improves the performance.
+We can also see that \hbox{L-Net$_1$} achieves results comparable to LCNet despite using only half of the network parameters, which indicates that simply increasing the channel number of the convolutional layers cannot guarantee better feature extraction. In the rest of this chapter, we denote the results of ``L-Net$_1$ + N-Net + L-Net$_2$ + Finetune'' as ``\gcnetacronym''.
+
+\Tref{tab:synth_test_normal} shows that, as expected, the calibrated photometric stereo method PS-FCN (trained with ground-truth lightings) can estimate more accurate normals given better estimated lighting.
+
+\begin{table}[tbp]
+    \caption[Ablation study for network architecture of \gcnetacronym]{Ablation study for network architecture of \gcnetacronym. Lighting estimation results of \gcnetacronym on \syntestMERL dataset. The results are averaged over $100$ MERL BRDFs (bold fonts indicates the best).}
+    \input{ch-gcnet/tables/res_synth_test_light_v2} \label{tab:synth_test_light}
+\end{table}
+
+\begin{table}[tbp] \centering
+    \caption[Normal estimation results on \syntestMERL dataset]{Normal estimation results on \syntestMERL dataset. The estimated normals are predicted by PS-FCN~\cite{chen2018ps} given the lightings estimated LCNet and \gcnetacronym.}
+    \input{ch-gcnet/tables/res_synth_test_normal}
+    \label{tab:synth_test_normal}
+\end{table}
+
+\paragraph{Comparison of different cascaded structures}
+Cascaded structure is a popular strategy to improve performance. We compared the proposed structure for \gcnetacronym with three different structures (see \fref{fig:cascaded}) to verify our method's effectiveness.
+
+\begin{figure}[tbp] \centering%
+	\includegraphics[width=\textwidth]{ch-gcnet/images/Method/different_structures_simple.pdf}
+    \caption[Three different cascaded structures]{Three different cascaded structures. (a) L-Net$_1$ + L-Net$_2$. (b) L-Net$_1$ + N-Net + L-Net$_2^\text{(w/o shading)}$. (c) L-Net$_1$ + N-Net + L-Net$_2^\text{(w/o shading; w/ light)}$. We skip the input of L-Net$_1$ and the output of L-Net$_2$ for all models to simplify the illustration.} \label{fig:cascaded}
+\end{figure}
+
+\Fref{fig:cascaded}~(a) is a common structure to refine a network's estimation using another similar network. As discussed in \Sref{sec:guided_feature_extraction}, L-Net's bottleneck is the lack of inter-image information (\eg, normals) during feature extraction, making this structure sub-optimal (compare the experiments with IDs 5 \& 8 in \Tref{tab:synth_test_light}).
+\Fref{fig:cascaded}~(b) is a sequential structure where L-Net$_2$ additionally takes estimated normals as input. However, the experiments with the IDs~5~\&~7 show that taking the estimated shading (intra-image information) as input is beneficial.
+In \fref{fig:cascaded}~(c), L-Net$_2$ takes estimated normals and lightings as input.
+Our experiment shows that taking lightings as input can lead to faster convergence, but the final performance is worse than the proposed method, as show in the experiments with the IDs 5 \& 6.
+We suspect that L-Net$_2$ becomes more dependent on input lightings if directly taking them as input during training.
+When \mbox{L-Net$_1$'s} estimated lightings are not accurate, the refined estimation may not be good. 
+
+\begin{table}[tbp] \centering
+    \caption[Results on \emphobject{Armadillo} under three different lighting distributions]{Results on \emphobject{Armadillo} under three different lighting distributions.}
+    \input{ch-gcnet/tables/res_synth_biased_lighting}
+    \label{tab:synth_biased_light}
+\end{table}
+
+\paragraph{Results on different lighting distributions}
+To analyze the effect of biased lighting distributions on the proposed method, we evaluated \gcnetacronym on the \emphobject{Armadillo} illuminated under three different lighting distributions: a near uniform, a narrow, and an upward-biased distribution. 
+\Tref{tab:synth_biased_light} shows that both \gcnetacronym and LCNet have decreased performance under biased lighting distributions (\eg, the upward-biased distribution), but \gcnetacronym consistently outperforms LCNet.
+
+\begin{table}[htbp]
+    \caption[Lighting estimation results on \emphobject{Bunny} rendered with SVBRDFs]{Lighting estimation results on \emphobject{Bunny} rendered with SVBRDFs. (a) \emphobject{Bunny} with uniform BRDF. (b) and (c) show the ``Ramp'' and ``Irregular'' material maps and two sample images of \emphobject{Bunny} with the corresponding SVBRDFs.}
+    \input{ch-gcnet/tables/res_synth_SVBRDFs_v2}
+    \label{tab:synth_SVBRDFs}
+\end{table}
+
+\paragraph{Results on surfaces with SVBRDFs} 
+To analyze the effect of SVBRDFs, we used two different material maps to generate a synthetic dataset of surfaces with SVBRDFs following Goldman \etal~\cite{goldman2010shape}. Specifically, we rendered $100$ test objects by randomly sampling two MERL BRDFs and blended the BRDFs for \emphobject{Bunny} using ``Ramp''  and ``Irregular'' material maps shown in \Tref{tab:synth_SVBRDFs}~(b) and~(c).  
+\Tref{tab:synth_SVBRDFs} shows that although both methods perform worse on surfaces with SVBRDFs compared to uniform BRDFs, our method is still reasonably good even though it was trained on surfaces with uniform BRDFs.
+This might be explained by that although SVBRDFs may affect the feature extraction of some important clues such as shading, others such as attached shadows and specular highlights are less affected and can still be extracted to estimate reliable lightings.
+
+\begin{table}[htbp] \centering
+    \caption[Lighting estimation results on surface regions cropped from \emphobject{Bunny}]{Lighting estimation results on surface regions cropped from \emphobject{Bunny}.}
+    \input{ch-gcnet/tables/res_silhouette_v2} \label{tab:silhouette}
+\end{table}
+
+\paragraph{Effect of the object silhouette}
+Object silhouette can provide useful information for lighting calibration (\eg, normals at the occluding contour are perpendicular to the viewing direction). 
+To investigate the effect of the silhouette, we first rendered the \emphobject{Bunny} using two different types of BRDFs (\textit{alumina-oxide} and \textit{beige-fabric}) under $100$ lightings sampled randomly from the upper hemisphere, and then cropped surface regions with different sizes for testing. 
+\Tref{tab:silhouette} shows that both LCNet and our method perform robustly for surface regions with or without silhouette, while our method consistently outperforms LCNet. This is because the training data for both methods was generated by randomly cropping image patches from the Blobby and Sculpture datasets, which contains surface regions without silhouette. %
+
+
+\subsection{Evaluation on Real Data}
+\begin{table}[htbp] \centering
+    \caption[Lighting estimation results on \diligent]{Lighting estimation results on \diligent. Bold font indicates the best result.} %
+    \input{ch-gcnet/tables/res_diligent_light_2col} \label{tab:quant_light_diligent}
+\end{table}
+
+To demonstrate the proposed method's capability to handle real-world non-Lambertian objects, we evaluated our method on the challenging \emph{\diligent}~\cite{shi2019benchmark} and the \emph{\lightstage}~\cite{einarsson2006relighting}.
+
+\paragraph{Results on lighting estimation}
+We first compared our GCNet with the LCNet and non-learning method PF14~\cite{papad14closed}. 
+PF14 is the state-of-the-art traditional method for uncalibrated photometric stereo, and we used its publicly available code for testing.
+\Tref{tab:quant_light_diligent} shows that \gcnetacronym achieves the best average results on the \diligent with an MAE of $3.32$ for light directions and a relative error of $0.052$ for light intensities. 
+Although our \gcnetacronym does not achieve the best results for all objects, it exhibits the most robust performance with a maximum MAE of $5.77$ and a maximum relative error of $0.101$ compared with LCNet (MAE:~$10.36$, relative error:~$0.105$) and PF14 (MAE:~$33.22$, relative error:~$0.223$).
+\Frefs{fig:qual_lighting}~(a)-(b) visualize the lighting estimation results for the \emphobject{Pot1} and the \emphobject{Goblet}. The non-learning method PF14 works well for near-diffuse surfaces (\eg, \emphobject{Pot1}), but quickly degenerates on highly specular surfaces (\eg, \emphobject{Goblet}). Compared with LCNet, \gcnetacronym is more robust to surfaces with different reflectances and shapes.
+
+\begin{table}[tbp] \centering%
+    \caption[Lighting estimation results on \lightstage]{Lighting estimation results on \lightstage.}%
+    \input{ch-gcnet/tables/res_lightstage_light_wide} \label{tab:quant_light_lightstage}
+\end{table}
+
+\Tref{tab:quant_light_lightstage} shows lighting estimation results on the \lightstage. Our \gcnetacronym significantly outperforms LCNet and PF14, and achieves an average MAE of $9.20$ for light directions and a relative error of $0.163$ for light intensities, improving the results of LCNet by $32.4\%$ and $26.4\%$ for light directions and light intensities respectively.
+\Frefs{fig:qual_lighting}~(c)-(d) visualize lighting estimation results for the \lightstage's \emphobject{Standing Knight} and \emphobject{Plant}.
+
+\begin{figure}[tbp] \centering%
+    \input{ch-gcnet/figures/qual_lighting}
+    \caption[Visualization of the estimated lighting distributions]{Visualization of the ground-truth and estimated lighting distributions for the \diligent and \lightstage. } \label{fig:qual_lighting} %
+\end{figure}
+
+\paragraph{Results on surface normal estimation}
+We then verified that the proposed \gcnetacronym can be seamlessly integrated with existing calibrated methods to handle uncalibrated photometric stereo. 
+Specifically, we integrated the \gcnetacronym with a state-of-the-art non-learning calibrated method ST14~\cite{shi2014bi} and two learning-based methods PS-FCN and IS18~\cite{ikehata2018cnn}.
+\Tref{tab:quant_diligent_normal} shows that these integrations can outperform existing state-of-the-art uncalibrated methods~\cite{alldrin2007r,shi2010self,wu2013calib,lu2013uncalibrated,papad14closed,lu2018symps} by a large margin on the \diligent.
+We can further see that ST14, PS-FCN, as well as IS18 perform better with \gcnetacronym's instead of LCNet's predicted lightings: $10.8$ vs.\ $12.1$ for PS14, $8.7$ vs.\ $9.7$ for PS-FCN, and $8.6$ vs.\ $16.5$ for IS18.
+\Fref{fig:qual_diligent_normal} presents visual comparisons on the \emphobject{Pot1} and \emphobject{Goblet} from the \diligent. 
+
+\begin{table}[tbp] \centering
+    \caption[Normal estimation results on \diligent]{Normal estimation results on \diligent.}
+    \input{ch-gcnet/tables/res_diligent_normal} \label{tab:quant_diligent_normal}
+\end{table}
+
+\begin{figure}[htbp] \centering
+    \input{ch-gcnet/figures/qual_diligent_normal_larger}
+    \caption[Visual comparisons of normal estimation for \emphobject{Pot1} and \emphobject{Goblet}]{Visual comparisons of normal estimation for \emphobject{Goblet} in the \diligent. We compared the normal estimation results of a calibrated method IS18~\cite{ikehata2018cnn} given lightings estimated by \gcnetacronym and LCNet.} \label{fig:qual_diligent_normal}
+\end{figure} 
+
+\Fref{fig:qual_lightstage} shows the surface normals of the \emphobject{Standing Knight} predicted by PS-FCN given lighting estimated by \gcnetacronym and LCNet. We can see that coupled with \gcnetacronym's more accurate lightings, PS-FCN can produce more reliable normal estimation for thin regions.
+
+\begin{figure}[htbp] \centering
+    \input{ch-gcnet/figures/qual_lightstage}
+    \caption{Visual comparison of normal estimation for the \lightstage's \emphobject{Standing Knight}.} \label{fig:qual_lightstage}
+\end{figure}
+
+\subsection{Failure Cases}
+\begin{figure}[htbp] \centering
+    \caption[Failure cases]{Failure cases. (a)~Results on a piecewise planar surface with sparse normal distribution. (b)~Results on a highly-concave bowl. The estimated normals are predicted by PS-FCN given GCNet's estimated lightings.} %
+	\label{fig:failure}  
+	\input{ch-gcnet/figures/failure_cases_v2}
+\end{figure}
+
+As discussed in \Sref{sec:LCNet_analysis}, LCNet relies on features like attached shadows, shading, and specular highlights, which is also true for \gcnetacronym. 
+For piecewise planar surfaces with a sparse normal distribution such as the one in \fref{fig:failure}~(a), few useful features can be extracted and as a result \gcnetacronym cannot predict reliable lightings for such surfaces.
+For highly-concave shapes under directional lightings, strong cast shadows largely affect the extraction of useful features.
+\Fref{fig:failure}~(b) shows that \gcnetacronym erroneously estimates a highly-concave bowl to be convex.
+Note that LCNet and PF14~\cite{papad14closed} also have similar problems.
+
+\section{Conclusion}
+In this chapter, we have first introduced a lighting calibration network, named LCNet, to estimated directional lightings for uncalibrated photometric stereo.
+To understand what have been learned by LCNet for lighting estimation, we analyze the features learned by the network, and find that attached shadows, shadings, and specular highlights are key elements for lighting estimation. 
+Based on our findings, we then introduced the \gcnetname, named \gcnetacronym, that explicitly leverages inter-image information of object shape and intra-image information of shading to estimate more reliable lightings.
+Experiments on both synthetic and real datasets showed that \gcnetacronym achieves significantly better results than LCNet, and demonstrated that our method can be integrated with existing calibrated photometric stereo methods to handle uncalibrated setups.

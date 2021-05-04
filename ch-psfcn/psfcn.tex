@@ -1,0 +1,365 @@
+\chapter{Learning Photometric Stereo} 
+\label{ch:psfcn}
+
+\section{Introduction}
+\begin{figure}[t]
+\centering
+    \includegraphics[width=\textwidth]{ch-psfcn/images/Intro/Intro.pdf}
+    \caption[Learning photometric stereo]{Given an arbitrary number of images and their associated light directions as input, our model estimates a normal map of the object in a fast feed-forward pass.} \label{fig:Intro}
+\end{figure}
+
+Given multiple images of a static object captured under different light directions with a fixed camera, the surface normals of the object can be estimated using photometric stereo techniques. 
+Early calibrated photometric stereo methods assumed a simplified reflectance model, such as the ideal Lambertian model~\cite{woodham1980ps,silver1980determining} or analytical reflectance models~\cite{tozza2016direct,chung2008efficient,ruiters2009heightfield}. 
+However, most of the real-world objects are non-Lambertian, and a specific analytical model is only valid for a small set of materials. A bidirectional reflectance distribution function (BRDF) is a general form for describing the reflectance property of a surface, but it is difficult to directly use a non-parametric form of BRDFs for photometric stereo. 
+Hence, it remains an open and challenging problem to develop a computationally efficient photometric stereo method that can handle materials with diverse BRDFs. 
+
+Recently, with the great success of deep learning in various computer vision tasks, deep learning based methods have been introduced to calibrated photometric stereo to handle surfaces with general and unknown isotropic reflectance~\cite{santo2017deep,ikehata2018cnn,Taniai18}. Instead of explicitly modeling complex surface reflectances, they directly learn the mapping from reflectance observations to surface normals given known light directions. 
+However, the method in~\cite{santo2017deep} depends on a pre-defined set of light directions during training and testing. The methods in~\cite{santo2017deep,ikehata2018cnn} estimate the surface normals in a pixel-wise manner, making them not possible to account for the local context information of a surface point (\eg, surface smoothness prior).
+Taniai and Maehara~\cite{Taniai18} introduced an optimization framework based on deep neural network, but their method suffers from complex scenes and requires a long processing time. 
+
+In this work, we propose a deep fully convolutional network (FCN)~\cite{long2015fully}, called PS-FCN for calibrated photometric stereo.
+PS-FCN takes an arbitrary number of images with their associated light directions as input, and predicts a surface normal map of the scene in a fast feed-forward pass (see~\fref{fig:Intro}).
+Compared with previous learning based methods, our method does not depend on a pre-defined set of light directions during training and testing, and can handle multiple images in an order-agnostic manner. 
+Moreover, convolutional neural network (CNN) can naturally incorporate information of the observations at neighboring pixels for computing feature maps, allowing our method to take advantage of local context information. 
+
+To simulate real-world complex non-Lambertian surfaces for training PS-FCN, we create two synthetic datasets using shapes from the blobby shape dataset~\cite{johnson2011shape} and the sculpture shape dataset~\cite{wiles2017silnet}, and BRDFs from the MERL BRDF dataset~\cite{matusik2003merl}. After training on synthetic data, we show that PS-FCN can generalize well on real datasets, including the \diligent~\cite{shi2019benchmark}, the \gourd~\cite{alldrin2008p}, and the \lightstage~\cite{einarsson2006relighting}. 
+Extensive experiments on public real datasets show that PS-FCN outperforms existing approaches in calibrated photometric stereo.
+
+Preliminary results of this chapter were published in~\cite{chen2018ps,chen2020deepps}.
+Our code, models, and datasets are available at \url{https://guanyingc.github.io/PS-FCN}. 
+
+\section{Related Work}
+\label{sec:psfcn_related_work}
+In this section, we briefly review representative non-Lambertian photometric stereo techniques. More comprehensive surveys of photometric stereo algorithms can be found in~\cite{herbort2011introduction,shi2019benchmark}. Non-Lambertian photometric stereo methods can be broadly divided into four categories, namely outlier rejection based methods, sophisticated reflectance model based methods, exemplar based methods, and learning based methods.
+
+Outlier rejection based methods assume non-Lambertian observations to be local and sparse such that they can be treated as outliers. Various outlier rejection methods have been proposed so far. They are based on rank minimization~\cite{wu2010robust}, RANSAC~\cite{mukaigawa2007analysis}, taking median values~\cite{miyazaki2010median}, expectation maximization~\cite{wu2010photometric}, and sparse Bayesian regression~\cite{ikehata2012robust}. These outlier rejection methods generally require lots of input images and have difficulty in handling objects with non-sparse non-Lambertian observations (\eg, materials with broad and soft specular highlights).
+
+Many sophisticated reflectance models have been proposed to approximate the non-Lambertian model, including analytical models like Torrance-Sparrow model~\cite{georghiades2003incorporating}, Ward model~\cite{chung2008efficient}, Cook-Torrance model~\cite{ruiters2009heightfield}, etc.
+Instead of rejecting specular observations as outliers, sophisticated reflectance model based methods fit an analytical model to all observations.  These methods require solving complex optimization problems, and can only handle limited classes of materials. Recently, bivariate BRDF representations~\cite{shi2014bi,ikehata2014p} were adopted to approximate isotropic BRDF, and a symmetry-based approach~\cite{holroyd2008photometric} was proposed to handle anisotropic reflectance without explicitly estimating a reflectance model. 
+
+Exemplar based methods usually require the observation of an additional reference object. Using a reference sphere, Hertzmann and Seitz~\cite{hertzmann2005example} subtly transformed the non-Lambertian photometric stereo problem to a point matching problem. Exemplar based methods can deal with objects with spatially-varying BRDFs without knowing the light directions, but the requirement of known shape and material of the reference object(s) limits their applications. As an extension, Hui and Sankaranarayanan~\cite{zhui2015ps} introduced a BRDF dictionary to render virtual spheres without using a real reference object, but at the cost of requiring light calibration and longer processing time.
+
+More recently, a few deep learning based methods have been introduced to calibrated photometric stereo~\cite{santo2017deep,Taniai18,ikehata2018cnn}. Santo~\etal~\cite{santo2017deep} proposed a fully-connected network to learn the mapping from reflectance observations captured under a pre-defined set of light directions to surface normal in a pixel-wise manner. 
+Ikehata~\cite{ikehata2018cnn} introduced a fixed shape representation, called observation map, that is invariant to the number and permutation of the images. For each surface point of the object, all its observations are merged into an observation map based on the given light directions, and the observation map is then fed to a CNN to regress a normal vector. 
+Li~\etal~\cite{li2019learning} and Zheng~\etal~\cite{zheng2019spline} focused on reducing the number of required images while maintaining similar accuracy under the framework proposed by Ikehata~\cite{ikehata2018cnn}.
+Compared with~\cite{santo2017deep,ikehata2018cnn}, our method can take advantage of local context information in predicting the surface normals, which results in a more robust behavior.
+Taniai and Maehara~\cite{Taniai18} introduced an unsupervised learning framework that predicts both the surface normals and reflectance images of an object. Their model is ``trained'' at test time for each test object by minimizing the reconstruction loss between the input images and the rendered images, while our model is trained with supervised learning and achieves better performance on complex surfaces.
+
+\section{Image Formulation Model}
+
+Following the conventional practice, we assume an orthographic camera with a linear radiometric response, directional lightings coming from the upper-hemisphere, and the viewing direction is parallel to the $z$-axis pointing towards the origin of world coordinates. Let us further assume that the image coordinates is aligned with the world $x\text{-}y$ coordinates.
+Consider a non-Lambertian surface whose appearance is described by a general isotropic BRDF $\rho$. Given a surface point with a unit surface normal vector $\vn \in \mathcal{S}^2$, $\mathcal{S}^2 = \{\vv \in \mathbb{R}^3 : \|\vv\|_2 = 1\}$ illuminated by the $j$-th incoming light with direction $\vl_j \in \mathcal{S}^2$ and intensity $e_j \in \mathbb{R}_+$, the image formation model from a fixed viewpoint can be expressed as
+\begin{equation}
+    \label{eq:formation}
+    m_j = e_j \rho (\vn, \vl_j)~\text{max}(\vn^\top \vl_j, 0) + \epsilon_j,
+\end{equation}
+where $m$ represents the measured intensity, $\text{max}(:, 0)$ operator expresses for attached shadows, and $\epsilon$ accounts for the global illumination effects (\eg, cast shadows and inter-reflections) and noise.
+
+For a Lambertian surface, the BRDF $\rho$ becomes an unknown constant. Theoretically, with three observations captured under non-coplanar light directions (without shadows), the albedo scaled surface normal can be uniquely determined~\cite{woodham1980ps}. 
+However, pure Lambertian surfaces barely exist, and we therefore have to consider a more complex problem of non-Lambertian photometric stereo. 
+
+Based on this model, given the observations of surface points (corresponding to individual pixels) under different (known) incoming lights, our method estimates the surface normals for these surface points. Different from traditional methods which approximate $\rho$ with some sophisticated reflectance models, our method directly learns the mapping from images and lightings to surface normals without explicitly modeling $\rho$.
+
+\section{A Flexible Learning Framework for Photometric Stereo}
+In this section, we first introduce our strategy for adapting CNNs to handle a variable number of inputs, and then present a flexible fully convolutional network, called PS-FCN, for learning photometric stereo. 
+
+\subsection{Max-pooling for Multi-feature Fusion}
+CNNs have been successfully applied to dense regression problems like depth estimation~\cite{eigen2014depth} and surface normal estimation~\cite{wang2015designing}, where the number of input images is fixed and identical during training and testing. Note that adapting CNNs to handle a variable number of inputs during testing is not straightforward, as convolutional layers require the input to have a fixed number of channels during training and testing. Given a variable number of inputs, a shared-weight feature extractor can be used to extract features from each of the inputs (\eg, siamese networks), but an additional fusion layer is required to aggregate such features into a representation with a fixed number of channels. A convolutional layer is applicable for multi-feature fusion only when the number of inputs is fixed. Unfortunately, this is not practical for photometric stereo where the number of inputs often varies.
+
+One possible way to tackle a variable number of inputs is to arrange the inputs sequentially and adopt a recurrent neural network (RNN) to fuse them. For example,~\cite{choy20163d} introduced a RNN framework to unify single- and multi-image 3D voxel prediction. The memory mechanism of RNN enables it to handle sequential inputs, but at the same time also makes it sensitive to the order of inputs. This order sensitive characteristic is not desirable for photometric stereo as it will restrict the illumination changes to follow a specific pattern, making the model less general.
+
+\begin{figure}[t] \centering
+    \includegraphics[width=\textwidth]{ch-psfcn/images/Method/pooling.pdf}
+    \caption[Multi-feature fusion with max-pooling and average-pooling]{A toy example for max-pooling and average-pooling mechanisms on multi-feature fusion.} \label{fig:pooling}
+\end{figure}
+
+More recently, order-agnostic operations (\eg, pooling layers) have been exploited in CNNs to aggregate multi-image information. Wiles and Zisserman~\cite{wiles2017silnet} used max-pooling to fuse features of silhouettes from different views for novel view synthesis and 3D voxel prediction. Hartmann~\etal~\cite{hartmann2017learned} adopted average-pooling to aggregate features of multiple patches for learning multi-patch similarity. In general, max-pooling operation can extract the most salient information from all the features, while average-pooling can smooth out the salient and non-activated features. \fref{fig:pooling} illustrates how max-pooling and average-pooling operations aggregate two features with a toy example.  
+
+For photometric stereo, we argue that max-pooling is a better choice for aggregating features from multiple inputs. 
+Our motivation is that, under a certain light direction, regions with high intensities or specular highlights provide strong clues for surface normal inference (\eg, for a surface point with a sharp specular highlight, its normal is close to the bisector of the viewing and light directions). Max-pooling can naturally aggregate such strong features from images captured under different light directions. Besides, max-pooling can ignore non-activated features during training, making it robust to cast shadow. As will be seen in \Sref{sec:psfcn_exp}, our experimental results do validate our arguments. We observe from experiments that each channel of the feature map fused by max-pooling is highly correlated to the response of the surface to a certain light direction. Strong responses in each channel are found in regions with surface normals having similar directions. The feature map can therefore be interpreted as a decomposition of the images under different light directions (see \fref{fig:res_visual}).
+
+\subsection{Network Architecture}
+\label{sub:Network Architecture}
+
+\begin{figure}[t] \centering
+    \includegraphics[width=\textwidth]{ch-psfcn/images/Method/network_v2}
+    \caption{Network architecture of PS-FCN.} \label{fig:network}
+\end{figure}
+
+PS-FCN is a multi-input-single-output (MISO) network consisting of three components, namely a shared-weight \emph{feature extractor}, a \emph{fusion layer}, and a \emph{normal regression sub-network} (see \fref{fig:network}). It can be trained and tested using an arbitrary number of images with their associated light directions as input\footnote{For calibrated photometric stereo, the input images are normalized by light intensities, and each light direction is represented by a unit $3$-vector.}.
+
+For each light direction, we have a $3$-channel input image with the dimensions of $3 \times h \times w$, where $h$ and $w$ are the image height and width, respectively. Concatenating images taken under $q$ different lightings $\{\vl_1, ..., \vl_q\}$, we have the data with the dimensions of $q \times 3 \times h \times w$. In addition, we represent the light vectors $\{\vl_1, ..., \vl_q\}$ as $3$-channel images having the same spatial resolution as the input images, resulting in another $q \times 3 \times h \times w$ data. Putting them together, we finally have $q \times 6 \times h \times w$ dimensional inputs to our model.
+We separately feed the image-light pairs to the shared-weight feature extractor to extract a feature map from each of the inputs, and apply a max-pooling operation in the fusion layer to aggregate these feature maps. Finally, the normal regression sub-network takes the fused feature map as input and estimates a normal map of the object.
+
+The shared-weight feature extractor has seven convolutional layers, where the feature map is down-sampled twice and then up-sampled once, resulting in a down-sample factor of two. This design can increase the receptive field and preserve spatial information with a small memory consumption. 
+The normal regression sub-network has four convolutional layers and up-samples the fused feature map to the same spatial dimension as the input images. A L2-normalization layer is appended at the end of the normal regression sub-network to produce the normal map.
+
+As PS-FCN is a fully convolutional network, it can be applied to datasets with different image sizes. Thanks to the max-pooling operation in the fusion layer, PS-FCN possesses an order-agnostic property. Besides, PS-FCN can be easily extended to handle uncalibrated photometric stereo, where the light directions are not known, by simply removing the light directions during training.
+
+\paragraph{Loss function}
+Training of our PS-FCN is supervised by the estimation error between the predicted and the ground-truth normal maps. We formulate our loss function as the commonly used cosine similarity loss, given by
+\begin{align}
+    \label{eq:normal}
+    \mathcal{L}_{\text{Normal}} = \frac{1}{hw} \sum_{i}^{hw} \left(1 - \vn_i^\top \tilde{\vn}_{i} \right),
+\end{align}
+where $\vn_{i}$ and $\tilde{\vn}_{i}$ denote the predicted normal and the ground-truth normal, respectively, at pixel $i$.
+If the predicted normal has a similar orientation as the ground truth, the dot-product $\vn_{i} \cdot \tilde{\vn}_{i}$ will be close to $1$ and the loss becomes small, and vice versa. Other losses like mean squared error can also be alternatively adopted.
+
+\subsection{Data Normalization for Handling Surfaces with SVBRDFs}
+As PS-FCN is a fully-convolutional network that processes the input images in a patch-wise manner and is trained on surfaces with homogeneous BRDF, it may have difficulties in dealing with steep color changes caused by surfaces with spatially-varying BRDFs (SVBRDFs), as shown in~\fref{fig:cat_SVBRDF}~(c).
+A straightforward idea to tackle this problem is to train a model on surfaces with SVBRDFs. However, creating a large-scale training dataset for this purpose is not trivial, since modeling surface appearance with realistic SVBRDFs requires manual editing from artists.
+Even someone can collect a large-scale dataset of objects with SVBRDFs, the created dataset may not be able to faithfully cover the distribution of real data. 
+In this work, we introduce a simple yet effective data normalization strategy to enable PS-FCN to handle surfaces with SVBRDFs robustly. We will show that with the proposed data normalization strategy, our method can generalize well to surfaces with SVBRDFs after training only on surfaces with homogeneous BRDF.
+
+\begin{figure}[tbp] \centering
+    \input{ch-psfcn/figures/SVBRDF_cat.tex}
+    \caption[Comparison between PS-FCN and \PSFCNplusN on \emphobject{Cat} with SVBRDF]{Comparison between PS-FCN and \PSFCNplusN on \emphobject{Cat} with spatially-varying BRDFs. Numbers in parentheses denote mean angular error (MAE) in degree.} \label{fig:cat_SVBRDF}
+\end{figure}
+
+\begin{figure}[t] \centering
+    \input{ch-psfcn/figures/SVBRDF_cat_normalized.tex}
+    \caption[Illustration of the introduced data normalization operation]{Illustration of the introduced data normalization operation on \emphobject{cat} and \emphobject{ball} in the \diligent. The first and third rows show the original images, while the second and last rows show the normalized images. Only $5$ out of $96$ images for each object are shown.} \label{fig:normalization_SVBRDF}
+\end{figure}
+
+During training, given $q$ observations of a surface point\footnote{Note that the observations are already normalized by the light intensities.}, we concatenate all the observations and normalize them to a unit length vector by
+\begin{align}
+    \label{eq:normalize}
+    \left(m_1', ..., m_{q}'\right) = \left(\frac{m_1}{\sqrt{m_1^2+...+m_{q}^2}}, ..., \frac{m_{q}}{\sqrt{m_1^2+...+m_{q}^2}}\right),
+\end{align}
+where $m$ and $m'$ represent the original and normalized observations, respectively (for RGB images, we perform normalization on each channel separately). 
+The intuition behind this operation is as follows. Consider a Lambertian model, the BRDF $\rho(\vn, \vl)$ degenerates to a constant albedo $\rho$ and $m = \rho \max(\vn^\top \vl_j, 0)$. 
+After the data normalization operation, we have
+\begin{align}
+    \label{eq:normalize2}
+    m_{i}' = \frac{\max(\vn^\top \vl_i, 0)}{\sqrt{\max(\vn^\top \vl_1, 0)^2 + \cdots + \max(\vn^\top \vl_q, 0)^2}}.
+\end{align}
+\Eref{eq:normalize2} shows that the effect of albedo in Lambertian surfaces can be removed after performing data normalization, as shown in the first example in \fref{fig:normalization_SVBRDF}.
+
+However, the above conclusion is not true for non-Lambertian surfaces, because for regions with specular highlights under some light directions, the observations under other light directions will be suppressed after data normalization (see the example of \emphobject{ball} in \fref{fig:normalization_SVBRDF}).
+Nevertheless, we experimentally found that such a normalization strategy works equally well for non-Lambertian surfaces under the PS-FCN framework.
+This might be explained by the fact that for a non-Lambertian surface under directional lighting, the low-frequency observations are quite close to Lambertian reflectance~\cite{shi2014bi}.
+For observations exhibiting specular highlights under some light directions, the max-pooling operation in the fusion layer can naturally ignore the non-activated features (\ie, features extracted from the suppressed observations) and aggregate the most salient features.  
+Note that this normalization strategy has also been adopted in~\cite{sato2007shape,lu2013uncalibrated} to compute the similarity between two pixel intensity profiles of non-Lambertian surfaces, while we use this normalization strategy as a preprocessing for CNNs to handle surfaces with SVBRDFs.  
+
+When the number of input images at test time $t$ is different from that in training $q$, the magnitude of the normalized observations will be different, which leads to decreased performance (\eg, when all observations have the same values, 
+we have $m_{\text{train}}' = 1/\sqrt{q}, m'_{\text{test}}=1/\sqrt{t}$). 
+We experimentally verified that multiplying the normalized observations with the scalar $\sqrt{t/q}$ at test time solves this problem.
+We trained a variant model of PS-FCN, denoted as \PSFCNplusN, using the proposed data normalization strategy.
+\Fref{fig:cat_SVBRDF}~(d) shows an example result that \PSFCNplusN performed better than PS-FCN on surfaces with SVBRDFs.
+
+\section{Dataset for Learning and Evaluation}
+\label{sec:psfcn_dataset}
+The training of PS-FCN requires the ground-truth normal maps of the objects. However, obtaining ground-truth normal maps of real objects is a difficult and time-consuming task. Hence, we create two synthetic datasets for training and one synthetic dataset for testing. The publicly available real photometric stereo datasets are reserved to validate the generalization ability of our model. Experimental results show that our PS-FCN trained on the synthetic datasets generalizes well on the challenging real datasets.
+
+\subsection{Synthetic Data for Training}
+We used shapes from two existing 3D datasets, namely the blobby shape dataset~\cite{johnson2011shape} and the sculpture shape dataset~\cite{wiles2017silnet}, to generate our training data using the physically based raytracer Mitsuba~\cite{jakob2010mitsuba}. Following DPSN~\cite{santo2017deep}, we employed the MERL dataset~\cite{matusik2003merl}, which contains 100 different BRDFs of real-world materials, to define a diverse set of surface materials for rendering these shapes. 
+Note that our datasets explicitly consider cast shadows during rendering.
+For the sake of data loading efficiency, we stored our training data in 8-bit PNG format.
+
+\noindent{\bf Blobby dataset\enspace} We first followed~\cite{santo2017deep} to render our training data using the blobby shape dataset~\cite{johnson2011shape}, which contains 10 blobby shapes with various normal distributions. For each blobby shape, $1,296$ regularly-sampled views (36 azimuth angles $\times$ 36 elevation angles) were used, and for each view, 2 out of 100 BRDFs were randomly selected, leading to 25,920 samples ($10\times 36\times 36\times 2$).
+For each sample, we rendered 64 images with a spatial resolution of $128 \times 128$ under light directions randomly sampled from a range of 180\degree $\times$ 180\degree, which is more general than the range (74.6\degree $\times$ 51.4\degree) used in the real data benchmark~\cite{shi2019benchmark}. We randomly split this dataset into $99:1$ for training and validation (see \fref{fig:data_samples}(a)).
+
+\begin{figure} \centering
+    \input{ch-psfcn/figures/syn_samples}
+    \caption{Examples of the synthetic training data.}
+    \label{fig:data_samples}
+\end{figure}
+
+\noindent{\bf Sculpture dataset\enspace} The surfaces in the blobby shape dataset are usually largely smooth and lack of details. To provide more complex (realistic) normal distributions for training, we employed 8 complicated 3D models from the sculpture shape dataset introduced in~\cite{wiles2017silnet}. We generated samples for the sculpture dataset in exactly the same way we did for the blobby shape dataset, except that  we discarded views containing holes or showing uniform normals (\eg, flat facets). 
+The rendered images are with a size of $512 \times 512$ when a whole sculpture shape is in the field of view.
+We then regularly cropped patches of size $128 \times 128$ from the rendered images and discarded those with a foreground ratio less than 50\%.\footnote{Each training image in the blobby dataset shows part of an object or a whole object depending on the viewpoint, whereas each training image in the sculpture dataset shows only part of an object since the sculpture shapes are much larger than the blobby shapes.}
+This gave us a dataset of 59,292 samples, where each sample contains 64 images rendered under different light directions. Finally, we randomly split this dataset into $99:1$ for training and validation (see \fref{fig:data_samples}(b)).
+
+\noindent{\bf Data augmentation\enspace} To narrow the gap between real and synthetic data, data augmentation was carried out on-the-fly during training. Given an image of size $128\times 128$, we randomly performed image rescaling (with the rescaled width and height within the range of $[32, 128]$, without preserving the original aspect ratio) and noise perturbation (in a range of $[-0.025, 0.025]$). Image patches of size $32\times 32$ were then randomly cropped for training. 
+
+\begin{figure}[t] \centering
+    \input{ch-psfcn/figures/syn_test_samples}
+    \caption[Illustration of the synthetic test dataset \syntestMERL]{(a) Lighting distribution of \syntestMERL dataset. The light direction is visualized by mapping a $3$-d vector $[x,y,z]$ to a point $[x,y]$. (b) Ground-truth normals of \emphobject{Sphere}, \emphobject{Bunny}, \emphobject{Dragon}, and \emphobject{Armadillo}. (c) Visualization of the selected material maps (Ramp, Checker, Irregular) and examples in \dragonSVBRDF dataset.} \label{fig:syn_test_sample}
+\end{figure}
+
+\subsection{Synthetic Data for Analysis}
+\label{subsec:synth_test_data}
+To quantitatively evaluate the performance of our method on different materials and shapes, we rendered a synthetic test dataset including Sphere, Bunny, Dragon, and Armadillo shapes. Hereafter, we denote this test dataset as \syntestMERL and these shapes as \emphobject{Sphere}, \emphobject{Bunny}, \emphobject{Dragon}, \emphobject{Armadillo} respectively. 
+Each shape was rendered with $100$ isotropic BRDFs from MERL dataset~\cite{matusik2003merl} under $100$ light directions randomly sampled from the upper-hemisphere, leading to $400$ test objects (see \fref{fig:syn_test_sample}~(a)-(b)).
+Cast shadows and inter-reflections were considered during rendering using the physically based raytracer Mitsuba~\cite{jakob2010mitsuba}. 
+
+To analyze how surfaces with SVBRDFs affect the performance of our method, we created another synthetic test dataset with SVBRDFs, denoted as \dragonSVBRDF, following~\cite{goldman2010shape}.
+Specifically, we blended two BRDFs from $100$ MERL dataset for \emphobject{dragon} using $3$ materials maps, namely the \emph{Ramp}, \emph{Checker}, and \emph{Irregular}, as shown in \fref{fig:syn_test_sample}~(c). Note that for each material map, there are $C(100,2)=4,950$ combinations of two BRDFs, leading to $14,850$ test objects.
+
+\begin{figure}[t] \centering
+    \input{ch-psfcn/figures/test_data_light_distribution}
+    \caption[Lighting distributions of the real testing datasets]{Lighting distributions of the real testing datasets. The color of the point indicates the light intensity (value is divided by the highest intensity to normalize to $[0,1]$).} \label{fig:light_dist}
+\end{figure}
+
+\subsection{Real Data for Testing}
+We employed three challenging real non-Lambertian photometric stereo datasets for testing, namely the \emph{\diligent}~\cite{shi2019benchmark}, \emph{\gourd}~\cite{alldrin2008p}, and \emph{\lightstage}~\cite{einarsson2006relighting}. Note that none of these datasets were used in the training.
+
+\diligent~\cite{shi2019benchmark} is a public dataset containing $10$ real objects, and each object was captured under $96$ predefined light directions (see \fref{fig:light_dist}~(a)).  Both ground-truth lighting conditions and normal maps are provided. 
+We quantitatively evaluated the performance of our method on both lighting and normal estimation.
+
+Gourd\&Apple dataset~\cite{alldrin2008p} consists of three objects, namely \emphobject{Apple}, \emphobject{Gourd1}, and \emphobject{Gourd2}, with $112$, $102$ and $98$ images, respectively. 
+\Frefs{fig:light_dist}~(b)-(d) visualize the lighting distributions of this dataset.  
+\lightstage~\cite{einarsson2006relighting} is composed of six objects, and $253$ images are provided for each object. We only used $133$ images with the front side of the object under illumination. \Fref{fig:light_dist}~(e) visualizes the lighting distribution of the selected images.
+Since these two datasets only provide calibrated lightings (without ground-truth normal maps), we quantitatively evaluated our method on lighting estimation but only qualitatively evaluated it on normal estimation.
+
+\section{Experimental Results}
+\label{sec:psfcn_exp}
+In this section, we present experimental results and analysis. We carried out network analysis for PS-FCN on the synthetic test dataset, and compared our method with the previous state-of-the-art methods on the \diligent~\cite{shi2019benchmark}. Mean angular error (MAE) in degree was used to measure the accuracy of the predicted normal maps. We further provided qualitative results on the \gourd~\cite{alldrin2008p} and the \lightstage~\cite{einarsson2006relighting}. 
+
+\paragraph{Implementation Details}
+Our framework was implemented in PyTorch~\cite{paszke2017pytorch} with 2.2 million learnable parameters. 
+We trained our model using a batch size of 32 for 30 epochs, and it only took a few hours for training to converge using a single NVIDIA Titan X Pascal GPU (\eg,  about 1 hour for 8 image-light pairs per sample on the blobby dataset, and about 9 hours for 32 image-light pairs per sample on both the blobby and sculpture datasets).
+Adam optimizer~\cite{kingma2014adam} was used with default parameters ($\beta_1=0.9$ and $\beta_2=0.999$), where the learning rate was initially set to 0.001 and divided by 2 every 5 epochs. 
+
+\subsection{Evaluation on Synthetic Data}
+We quantitatively analyzed PS-FCN on the synthetic dataset. 
+In particular, we first validated the effectiveness of max-pooling in multi-feature fusion by comparing it with average-pooling and convolutional layers.
+We then investigated the influence of the complexity of training data, and the influence of input image number during training and testing. 
+For all the experiments in network analysis, we performed $100$ random trials (save for the experiments using all $100$ image-light pairs per sample during testing) and reported the average results.
+Last, we analyzed the performance of PS-FCN on surfaces with cast shadows, SVBRDFs, and different materials.
+
+\begin{table}[htbp] \centering
+    \caption[Normal estimation results of PS-FCN on \syntestMERL dataset]{Normal estimation results of different variant models of PS-FCN on \syntestMERL dataset. The results are averaged over samples rendered with $100$ BRDFs. B and S stand for the blobby and sculpture training datasets, respectively.} 
+    \input{ch-psfcn/tables/res_quant_calib_normal_synth} \label{tab:quant_calib_normal_syn}
+\end{table}
+
+\paragraph{Effectiveness of max-pooling} We first validated the effectiveness of max-pooling in multi-feature fusion by comparing it with convolutional layers and average-pooling. 
+Experiments with IDs A0 \& A1 in \Tref{tab:quant_calib_normal_syn} show that fusion by convolutional layer on the concatenated features was sub-optimal. This could be explained by the fact that the weights of the convolutional layer are related to the order of the input features, while the order of the input image-light pairs is random in our case, thus increasing the difficulty for the convolutional layer to find the relations among multiple features. 
+Experiments with IDs A2 \& A3 compared the performance of average-pooling and max-pooling for multi-feature fusion. It can be seen that max-pooling performs consistently better than average-pooling on \syntestMERL dataset.
+\Fref{fig:res_visual} visualizes the fused features by max-pooling for four objects with different shapes and reflectances. We can see that each channel of the fused features can be interpreted as the probability of the normal belonging to a certain direction, and max-pooling can naturally aggregate such information from multiple observations.
+
+\begin{figure}[htbp]
+\centering
+    \input{ch-psfcn/figures/res_visual_release}
+    \caption[Visualization of the learned feature map after fusion]{Visualization of the learned feature map after fusion. The first two columns show the images and ground-truth normal maps. Each of the subsequent columns (a-h) shows one particular channel of the fused feature map. 8 out of the 128 channels of the feature map are presented. Note that different regions with similar normal directions are fired in different channels. Each channel can therefore be interpreted as the probability of the normal belonging to a certain direction (or alternatively as the object shading rendered under a certain light direction). Accurate normal maps can then be inferred from these probability distributions.} \label{fig:res_visual}
+\end{figure}
+
+\begin{figure}[htbp] \centering
+    \includegraphics[width=0.45\textwidth]{ch-psfcn/images/Results/Synth_Test/train_normal_img_num_sensitivity_v3.pdf}
+    \includegraphics[width=0.45\textwidth]{ch-psfcn/images/Results/Synth_Test/test_normal_img_num_sensitivity.pdf} 
+    \\ \vspace{-0.5em}
+    \makebox[0.45\textwidth]{\footnotesize (a)} 
+    \makebox[0.45\textwidth]{\footnotesize (b)} \\
+    \caption[Effect of the input image number]{(a) Results of PS-FCN trained and tested with different numbers of input images on \emphobject{Sphere}. (b) Results of PS-FCN trained with a fixed number of $32$ input images and tested with different numbers of input images.} 
+    \label{fig:calib_img_num_syn}
+\end{figure}
+
+\paragraph{Effects of training data and input image number} 
+By comparing experiments with ID A3 \& A4 in \Tref{tab:quant_calib_normal_syn}, we can see that training with the additional sculpture dataset that has a more complex normal distribution helped to boost the performance of PS-FCN. This result suggests that the performance of PS-FCN could be further improved by introducing more complex and realistic training data. 
+
+\Fref{fig:calib_img_num_syn}~(a) shows that for a fixed number of inputs during testing, PS-FCN performs better when the number of inputs during training is close to that during testing. 
+It is worth noting that when there is only one input image, the problem reduces to the more challenging shape-from-shading problem. \Fref{fig:calib_img_num_syn}~(a) shows that PS-FCN performs best when the training image number is also $1$, with an average MAE of $18.75\degree$ for \emphobject{Sphere}. However, this result is moderately inaccurate, indicating that PS-FCN has difficulties in resolving the ambiguity in the problem of shape from shading.
+
+\Fref{fig:calib_img_num_syn}~(b) shows that for a fixed number of inputs during training, the performance of PS-FCN increases with the number of inputs during testing. This is a desired property for photometric stereo as we can simply capture more images for robust estimation. 
+For the rest of this chapter, we refer PS-FCN as the model trained on both datasets and with an input of $32$ image-light pairs per sample.
+
+\paragraph{Effects of lighting distributions} We tested PS-FCN on \emphobject{Bunny} rendered with three different lighting distributions, as shown in \Tref{tab:res_synth_mirco_baseline}. These three distributions have the same number of light source (\ie, $17$), but with different spanning ranges.
+We can see that PS-FCN performs better when lightings are more diversely distributed. For the highly clustered distribution (see \Tref{tab:res_synth_mirco_baseline}~(c)), the results of PS-FCN drops notably. Since the lightings are randomly sampled from the upper-hemisphere (\ie, spanning range of $180\degree \times 180\degree$) during training, it is therefore not surprising to see PS-FCN with decreased performance under this extreme lighting distribution.
+
+\begin{table}[htbp] \centering
+    \caption[Results on \emphobject{Bunny} rendered using three different lighting distributions]{Results of PS-FCN on \emphobject{Bunny} rendered using three different lighting distributions.} 
+    \label{tab:res_synth_mirco_baseline}
+    \input{ch-psfcn/figures/res_synth_micro_baseline}
+\end{table}
+
+\paragraph{Results on surface with cast shadows} 
+\begin{figure}[htbp] \centering
+    \begin{subfigure}[t]{0.9\textwidth}
+        \input{ch-psfcn/figures/res_visual_cast_shadow_v3}\vspace{-1.5em}
+        \caption{The first five columns show the input images and the extracted features for each image (only $3$ out of $128$ feature channels are shown). The last column shows the object mask and the fused features by max-pooling. Red boxes in the images indicate regions with cast shadows.} \label{fig:visual_cast_shadow}
+    \end{subfigure} \\ \vspace{1em}
+    \begin{subfigure}[t]{0.8\textwidth}
+        \input{ch-psfcn/figures/res_compare_cast_shadow}
+        \caption{Comparison between PS-FCN, SS17~\cite{santo2017deep} and L2 Baseline~\cite{woodham1980ps} on \emphobject{Goblet}. The first row shows the ground-truth and estimated normals, and the second row shows the object and the error maps.} \label{fig:compare_cast_shadow} %
+    \end{subfigure}
+    \caption[Illustration of how max-pooling fusion layer handles cast shadow]{Illustration of how max-pooling fusion layer handles surface regions with cast shadow using \emphobject{Goblet} from the \diligent. (Note that the provided object mask and ground-truth normal map do not include the concave interior of \emphobject{Goblet}.)} \label{fig:cast_shadow}
+\end{figure}
+
+The presence of cast shadow is almost inevitable when the geometry of the object is non-convex, and is one of the major difficulties in photometric stereo.
+Given the observation that a real surface point is unlikely to be shadowed under all light directions, we argue that max-pooling fusion can naturally overcome the effect of cast shadow when determining the surface normals.
+This is because even a surface point is shadowed under some light directions, it can be observed under other light directions, and max-pooling can ignore those non-activated features and aggregate those activated features. 
+\Fref{fig:cast_shadow}~(a) visualizes how max-pooling aggregates features from multiple observations and handles cast shadow. Compared with L2 baseline~\cite{woodham1980ps} and SS17~\cite{santo2017deep}, our method is more robust in regions with cast shadow (see \fref{fig:cast_shadow}~(b)).
+
+\begin{figure}[htbp] \centering
+    \input{ch-psfcn/figures/res_synth_SVBRDF}
+    \caption[Comparison between PS-FCN and \PSFCNplusN on \dragonSVBRDF dataset]{Comparison between PS-FCN and \PSFCNplusN on \dragonSVBRDF dataset.} \label{fig:res_synth_SVBRDF} %
+\end{figure}
+
+\begin{sidewaysfigure}[htbp]\centering
+    \includegraphics[width=\textwidth]{ch-psfcn/images/Results/Synth_Test/L2_combine.pdf} 
+    \caption[Quantitative results on \emphobject{Sphere} rendered with $100$ MERL BRDFs]{Quantitative results on \emphobject{Sphere} rendered with $100$ MERL BRDFs.  The average MAE for L2 Baseline~\cite{woodham1980ps}, PS-FCN, and \PSFCNplusN are 12.59, 2.66 and 2.91, respectively.} \label{fig:100brdfs}
+\end{sidewaysfigure}
+
+\paragraph{Results on surfaces with SVBRDFs} 
+To analyze how PS-FCN deteriorates in dealing with surfaces with SVBRDFs and verify the effectiveness of the proposed data normalization strategy, we compared PS-FCN and \PSFCNplusN on \dragonSVBRDF dataset and the results are summarized in \fref{fig:res_synth_SVBRDF}. We can see that both models perform well on surfaces with homogeneous materials or surfaces with smooth BRDF changes (\eg, surfaces blended with Ramp). However, PS-FCN has difficulty in dealing with steep color changes caused by SVBRDFs (\eg, surfaces blended with Checker and Irregular). In contrast, \PSFCNplusN is robust in handling surfaces with different types of SVBRDFs, which clearly demonstrates the effectiveness of the proposed data normalization strategy.
+
+\paragraph{Results on different materials}
+    \Fref{fig:100brdfs} compares PS-FCN, \PSFCNplusN, and L2 Baseline~\cite{woodham1980ps} on \emphobject{Sphere} that was rendered with $100$ different BRDFs.
+It can be seen that PS-FCN and \PSFCNplusN achieved comparable results on different materials, which indicates that training with data normalization strategy will not worsen the results on homogeneous surfaces. 
+Besides, both models significantly outperformed the L2 Baseline~\cite{woodham1980ps}. 
+
+\subsection{Evaluation on Real Data}
+\label{sub:Evaluation on Real Data}
+
+\begin{table}[htbp]
+    \caption[Quantitative comparison on the \diligent]{Quantitative comparison of calibrated photometric stereo on the \diligent. The numbers represent the MAE (the lower the better).} 
+    \label{tab:quant_main}
+    \input{ch-psfcn/tables/res_quant_diligent} \\
+    \begin{flushleft}
+        {\footnotesize $^*$ indicates that the results of IS18~\cite{ikehata2018cnn} on \emphobject{Bear} was computed using all of the $96$ images. The result reported in IS18~\cite{ikehata2018cnn} (\emphobject{Bear}: $4.1$, Avg.: $7.2$) was evaluated by discarding the first $20$ images. When discarding the first $20$ images, our results are PS-FCN (\emphobject{Bear}: $5.0$, Avg.: $8.1$) and \PSFCNplusN (\emphobject{Bear}: $5.0$, Avg.: $7.1$).}
+    \end{flushleft}
+\end{table}
+
+\begin{figure}[htbp] \centering
+    \input{ch-psfcn/figures/res_SVBRDF_harvest} 
+    \caption[Qualitative results on \emphobject{Harvest} in the \diligent]{Qualitative results on \emphobject{Harvest} in the \diligent. Compared with PS-FCN, \PSFCNplusN performs better for surfaces with SVBRDFs. In contrast to those per-pixel normal estimation methods~\cite{ikehata2018cnn,hui2017shape,santo2017deep}, \PSFCNplusN can take advantage of the surface smooth prior and estimate a smoother normal map with less noise artifacts. Numbers in parentheses denote MAE in degree.} \label{fig:res_harvest}
+\end{figure}
+
+\paragraph{Comparison on \Diligent}
+We compared our method against the recently proposed learning based methods~\cite{santo2017deep,Taniai18,ikehata2018cnn} and other previous state-of-the-art methods on the \diligent, as shown in \Tref{tab:quant_main}. 
+After training with the data normalization strategy, \PSFCNplusN performs better than PS-FCN on almost all of the ten objects, except for \emphobject{Bear}.  
+Compared with the other state-of-the-art methods, \PSFCNplusN performs particularly well on surface with complexed geometry and/or SVBRDFs~(\eg, \emphobject{buddha}, \emphobject{reading}, and \emphobject{harvest}), and achieves state-of-the-art results with an average MAE of $7.4$.
+Qualitative comparison on \emphobject{Harvest} is shown in \fref{fig:res_harvest}.
+Note that PS-FCN did not outperform previous methods on all the $10$ objects. We hypothesize that this might be caused by the limited training data. Different from pixel-wise approaches like IS18~\cite{ikehata2018cnn} and HS17~\cite{hui2017shape}, our method relies on diverse surface patches for training, while the current training data are only generated from $18$ objects.
+
+\begin{figure}[htbp]\centering
+    \input{ch-psfcn/figures/res_qual_calib_light_stage}
+    \caption[Qualitative results on \lightstage]{Qualitative results of calibrated photometric stereo on \lightstage.}
+    \label{fig:qual_stage}
+\end{figure}
+
+\begin{figure}[htbp]\centering
+    \input{ch-psfcn/figures/res_qual_calib_gourd_v2}
+    \caption[Qualitative results on \gourd]{Qualitative results of calibrated photometric stereo on \gourd.}
+    \label{fig:qual_gourd}
+\end{figure}
+
+\paragraph{Evaluation on other real datasets}
+Due to absence of ground-truth normal maps, we qualitatively evaluated our best-performing model \PSFCNplusN on the \gourd~\cite{alldrin2008p} and the \lightstage~\cite{einarsson2006relighting} (see \fref{fig:qual_stage} and \fref{fig:qual_gourd}). 
+Our method can estimate visually pleasing and consistent surface normals for these two challenging datasets, while the L2 baseline~\cite{woodham1980ps} produces seemingly inaccurate surface normals for regions with specular highly or strong cast shadow (see \emphobject{Plant} in \fref{fig:qual_stage} for example).
+
+\paragraph{Runtime comparison}
+\Tref{tab:runtime} compares the runtime of four different deep learning methods in estimating a normal map with $612\times 512$ pixels. We can see that our method runs significantly faster than the online optimization based method~\cite{Taniai18} and more than $2\times$ faster than the per-pixel method~\cite{santo2017deep,ikehata2018cnn}. 
+
+\begin{table}[htbp]
+    \caption[Runtime comparison of different methods]{Runtime comparison of different methods in estimating a normal map with $612\times 512$ pixels.} \label{tab:runtime}
+    \input{ch-psfcn/tables/res_runtime}
+\end{table}
+
+\subsection{Extension for Uncalibrated Photometric Stereo}
+\label{sub:upsfcn}
+
+\begin{table}[htbp]
+    \caption[Results for uncalibrated photometric stereo on the \diligent]{Comparison of results for uncalibrated photometric stereo on the \diligent. The numbers represent the MAE (the lower the better). The results of a calibrated method PS-FCN are included in the last row as reference. Bold font indicates the best results in the uncalibrated methods.} \label{tab:uncalib}
+    \input{ch-psfcn/tables/res_uncalibrated}
+\end{table}
+
+PS-FCN can be easily extended to handle uncalibrated photometric stereo by simply removing the light directions from the input. To verify the potential of our framework towards uncalibrated photometric stereo, we trained an uncalibrated variant of our model, denoted as UPS-FCN, taking only images as input (note that we assume the images were normalized by the light intensities). UPS-FCN was trained on both synthetic datasets using 32 image-light pairs as input. We compared our UPS-FCN with the existing uncalibrated methods. The results are reported in \Tref{tab:uncalib}, our UPS-FCN outperformed existing methods in terms of the average MAE, which demonstrates the flexibility of our model.
+
+However, the performance of the UPS-FCN lags far behind the calibrated model PS-FCN, which takes both images and light directions as input.
+
+\section{Conclusion}
+In this work, we have proposed a flexible deep fully convolutional network, named PS-FCN, that accepts an arbitrary number of images and their associated light directions as input and regresses an accurate normal map. Our PS-FCN does not require a pre-defined set of light directions during training and testing, and allows both the number of lights and their directions used in testing different from that used in training. It can handle multiple images and light directions in an order-agnostic manner. In order to train PS-FCN, two synthetic datasets with various realistic shapes and materials have been created. After training, PS-FCN can generalize well on challenging real datasets. 
+In addition, PS-FCN can be easily extended to handle uncalibrated photometric stereo. 
+Results on diverse real datasets have clearly shown that PS-FCN outperforms previous calibrated photometric stereo methods, and promising results have been achieved in uncalibrated scenario. 
+

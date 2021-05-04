@@ -1,0 +1,22 @@
+\centering%
+\resizebox{1\linewidth}{!}{%
+    \Huge
+\begin{tabular}{l|l|*{2}{c}|*{2}{c}|*{2}{c}|*{2}{c}}%
+    \toprule
+    & & \multicolumn{2}{c|}{\emphobject{Sphere}} & \multicolumn{2}{c|}{\emphobject{Bunny}} & \multicolumn{2}{c|}{\emphobject{Dragon}} & \multicolumn{2}{c}{\emphobject{Armadillo}} \\
+    ID & Model & Direction    & Intensity  &  Direction    & Intensity  &  Direction    & Intensity &  Direction    & Intensity \\
+    \midrule
+    0 & LCNet              & 3.03 & 0.064 & 4.88  & 0.066 & 6.30 & 0.072 & 6.37 & 0.074 \\ 
+    \midrule
+    1 & L-Net$_1$ + N-Net + L-Net$_2$ + Finetune & \B{2.21} & \B{0.042} & \B{2.44}  & \B{0.046} & \B{3.88} & \B{0.055} & \B{3.52} & 0.060 \\
+    2 & L-Net$_1$ + N-Net + L-Net$_2$     & 2.52 & 0.052 & 2.90  & 0.054 & 4.20 & 0.061 & 3.92 & 0.060 \\
+    3 & L-Net$_1$ + N-Net + L-Net$_2^\text{(w/o normal)}$   & 2.45 & 0.050 & 3.35  & 0.051 & 5.82 & 0.070 & 5.25 & \B{0.059} \\
+    4 & L-Net$_1$                              & 3.20 & 0.053 & 4.47  & 0.060 & 5.80 & 0.081 & 5.71 & 0.079    \\ 
+    \midrule
+    5 & L-Net$_1$ + N-Net + L-Net$_2$     & \B{2.52} & 0.052 & \B{2.90}  & 0.054 & \B{4.20} & \B{0.061} & \B{3.92} & \B{0.060} \\
+    6 & L-Net$_1$ + N-Net + L-Net$_2^\text{(w/o shading; w/ light)}$ & 2.83 & 0.047 & 3.50 & \B{0.051} & 5.36 & 0.075 & 4.04 & 0.068\\
+    7 & L-Net$_1$ + N-Net + L-Net$_2^\text{(w/o shading)}$  & 2.79 & \B{0.046} & 3.21  & 0.056 & 4.63 & 0.072 & 4.29 & 0.062 \\ 
+    8 & L-Net$_1$ + L-Net$_2$                    & 2.92 & 0.051 & 4.37 & 0.058 & 5.99 & 0.079 & 5.31 & 0.077\\ 
+    \bottomrule
+\end{tabular}
+}

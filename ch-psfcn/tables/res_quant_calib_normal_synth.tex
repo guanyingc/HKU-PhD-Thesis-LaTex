@@ -1,0 +1,17 @@
+\resizebox{0.8\textwidth}{!}{
+    \Large
+    \begin{tabular}{*{5}{c}|*{4}{c}}
+        \toprule
+        \multicolumn{5}{c}{Model Variants} & \multicolumn{4}{c}{Test Objects} \\
+        ID & Data & Fusion &  Train \# & Test \# & {\sc Sphere} & {\sc Bunny} & {\sc Dragon} & {\sc Armod.} \\
+        \midrule
+        A0 & B   & Conv  & 32 & 32  & 4.54 & 6.74 & 9.57 & 9.87 \\
+        A1 & B   & Max-p & 32 & 32  & 3.65 & 5.33 & 7.86 & 8.09 \\
+        \midrule               
+        A2 & B   & Avg-p & 32 & 100 & 3.71 & 5.36 & 8.17 & 7.92 \\
+        A3 & B   & Max-p & 32 & 100 & 3.40 & 4.80 & 7.23 & 7.21 \\
+        \midrule               
+        A4 & B+S & Max-p & 32 & 100 & \B{2.66} & \B{3.80} & \B{4.83} & \B{5.24} \\
+        \bottomrule
+    \end{tabular}
+}

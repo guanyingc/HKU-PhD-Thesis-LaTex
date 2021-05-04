@@ -1,0 +1,21 @@
+\centering
+\resizebox{\textwidth}{!}{%
+    \large
+\begin{tabular}{l|*{3}{c}|*{3}{c}|*{3}{c}}
+    \toprule
+    \multicolumn{1}{c}{\includegraphics[height=0.18\textwidth]{ch-gcnet/images/Datasets/Synthetic/armadillo_normal}} &
+    \multicolumn{3}{c}{\includegraphics[height=0.18\textwidth]{ch-gcnet/images/Datasets/Synthetic/uniform_gt_lighting.jpg}} & 
+    \multicolumn{3}{c}{\includegraphics[height=0.18\textwidth]{ch-gcnet/images/Datasets/Synthetic/narrow_gt_lighting.jpg}
+    } & 
+    \multicolumn{3}{c}{\includegraphics[height=0.18\textwidth]{ch-gcnet/images/Datasets/Synthetic/up_gt_lighting.jpg}
+ \raisebox{0.0\height}{\includegraphics[height=0.18\textwidth]{ch-gcnet/images/Intro/colorbar_jet.pdf}}
+    } 
+    \vspace{-0.3em}\\
+    & \multicolumn{3}{c|}{Near Uniform} & \multicolumn{3}{c|}{Narrow} & \multicolumn{3}{c}{Upward-biased} \\
+    Model  & Direction    & Intensity & Normal  & Direction    & Intensity & Normal & Direction    & Intensity & Normal  \\
+    \midrule
+    LCNet + PS-FCN & 6.09 & 0.072 & 6.49 & 5.92 & 0.059 & 8.44 & 7.10 & 0.065 & 8.80 \\         
+    \gcnetacronym + PS-FCN & \B{3.39} & \B{0.059} & \B{4.90} & \B{4.29} & \B{0.048} & \B{6.82} & \B{5.96} & \B{0.054}  & \B{7.53} \\         
+    \bottomrule
+\end{tabular}
+}

@@ -1,0 +1,17 @@
+\newcommand*{\MinNumber}{0}
+\newcommand*{\MidNumber}{12} 
+\newcommand*{\MaxNumber}{40}
+\newcommand*{\Ratio}{70}
+
+\usepackage{pgfplots}
+\usepgfplotslibrary{dateplot}
+\newcommand{\cl}[1]{%
+        \ifdim #1 pt > \MidNumber pt
+            \pgfmathsetmacro{\PercentColor}{max(min(\Ratio*(#1 - \MidNumber)/(\MaxNumber-\MidNumber),\Ratio),0.00)} %
+            \edef\x{\noexpand\cellcolor{red!\PercentColor!yellow!80}}\x #1
+        \else
+            \pgfmathsetmacro{\PercentColor}{max(min(\Ratio*(\MidNumber - #1)/(\MidNumber-\MinNumber),\Ratio),0.00)} %
+            \edef\x{\noexpand\cellcolor{green!\PercentColor!yellow!80}}\x #1
+        \fi
+}
+\newcommand{\cla}[1]{#1}

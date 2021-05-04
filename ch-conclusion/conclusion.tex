@@ -1,0 +1,46 @@
+
+\chapter{Conclusions}
+\label{ch:conclusion}
+
+\section{Summary}
+This thesis has presented learning based solutions for
+
+\begin{itemize}
+    \item transparent object matting from a single image (\Cref{ch:tomnet}),
+    \item calibrated photometric stereo for non-Lambertian surfaces (\Cref{ch:psfcn}), and
+    \item lighting calibration for uncalibrated photometric stereo (\Cref{ch:lcnet}).
+\end{itemize}
+
+A brief summary of the algorithms and techniques introduced is given below.
+
+The problem of transparent object matting from a single image was addressed in \Cref{ch:tomnet}. We have introduced a simple and efficient model for transparent object matting, and proposed a CNN architecture, named TOM-Net, that takes a single image as input and predicts environment matte as an object mask, an attenuation mask, and a refractive flow field in a fast feed-forward pass. We created a large-scale synthetic dataset and a real dataset as a benchmark for learning transparent object matting. We have also shown that TOM-Net can perform better by incorporating a trimap or a background image in the input. Promising results have been achieved on both synthetic and real data, which clearly demonstrate the feasibility and effectiveness of the proposed approach.
+
+The problem of calibrated photometric stereo for non-Lambertian surfaces under directional lightings was addressed in \Cref{ch:psfcn}.
+We have proposed a flexible deep fully convolutional network, named PS-FCN, that accepts an arbitrary number of images and their associated light directions as input and regresses an accurate normal map. 
+Our PS-FCN does not require a pre-defined set of light directions during training and testing, and can handle multiple images and light directions in an order-agnostic manner.
+A data normalization strategy was introduced to better handle surfaces with SVBRDFs. 
+In order to train PS-FCN, two synthetic datasets with various realistic shapes and materials have been created. Results on diverse real datasets have clearly shown that our method outperforms previous calibrated photometric stereo methods. 
+
+The problem of lighting estimation for uncalibrated photometric stereo was addressed in \Cref{ch:lcnet}.
+We have first introduced a lighting calibration network, named LCNet, to estimate directional lightings for uncalibrated photometric stereo.
+To understand what have been learned by LCNet for lighting estimation, we analyse the features learned by the network, and find that attached shadows, shadings, and specular highlights are key elements for lighting estimation. 
+Based on our findings, we then introduced the guided calibration network, named GCNet, that explicitly leverages inter-image information of object shape and intra-image information of shading to estimate more reliable lightings.
+Experiments on both synthetic and real datasets showed that GCNet achieves significantly better results than LCNet, and demonstrated that our method can be integrated with existing calibrated photometric stereo methods to handle uncalibrated setups.
+
+\section{Future Work}
+Although the methods proposed in this thesis are novel and achieve promising results on their specific tasks, there are rooms for improvement.
+
+\begin{itemize}
+\item Colored transparent object matting under natural illumination
+
+    First, our transparent object matting method assumes objects to be colorless and is not applicable to colored transparent object. Second, we assume a single planar background as the only light source (following most of the previous works), and does not consider the more sophisticated refractive properties of a transparent object under natural illumination (\eg, specular highlight, Fresnel effect, and acoustic shadow).  
+It would be very useful to develop a method for colored transparent object matting under natural illumination in the future.
+
+\item Joint estimation of surface normals, reflectances, and lightings from photometric stereo images
+
+    We have proposed methods for estimating surface normals and directional lightings from multiple input images of an object. However, we did not explicitly estimate the surface reflectance of the object. By knowing the surface reflectance of an object, we can perform some interesting applications like object appearance editing. It would be helpful to consider the problem of joint estimation of surface normals, reflectances, and lightings from photometric stereo images.
+
+\item Photometric stereo under natural illumination
+
+    Most of the existing methods for photometric stereo (also in our methods) assume a directional lighting model, and this requires objects to be placed indoor with controllable illuminations. It would be interesting to consider a more general lighting model (\eg, natural illumination), as it allows accurate surface normal estimation of an object outside the laboratory environment.
+\end{itemize}

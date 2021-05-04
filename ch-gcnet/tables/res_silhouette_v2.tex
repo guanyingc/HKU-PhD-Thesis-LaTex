@@ -1,0 +1,45 @@
+\begin{minipage}[c]{0.46\textwidth} \centering
+    \raisebox{0.9\height}{\makebox[0.15\textwidth]{\makecell{\footnotesize Object \\ \footnotesize Mask}}}
+    \includegraphics[height=0.190\textwidth]{ch-gcnet/images/Results/Silouette/01_005_4_border} 
+    \includegraphics[height=0.190\textwidth]{ch-gcnet/images/Results/Silouette/01_003_4_border} 
+    \includegraphics[height=0.190\textwidth]{ch-gcnet/images/Results/Silouette/01_002_4_border} 
+    \includegraphics[height=0.190\textwidth]{ch-gcnet/images/Results/Silouette/01_001_4_border} 
+    \\
+    \raisebox{0.9\height}{\makebox[0.15\textwidth]{\makecell{\footnotesize Surface \\ \footnotesize Normal}}}
+    \includegraphics[height=0.190\textwidth]{ch-gcnet/images/Results/Silouette/01_005_5} 
+    \includegraphics[height=0.190\textwidth]{ch-gcnet/images/Results/Silouette/01_003_5} 
+    \includegraphics[height=0.190\textwidth]{ch-gcnet/images/Results/Silouette/01_002_5} 
+    \includegraphics[height=0.190\textwidth]{ch-gcnet/images/Results/Silouette/01_001_5} 
+    \\
+    \vspace{-0.5em}
+    \makebox[0.15\textwidth]{} 
+    \makebox[0.190\textwidth]{\footnotesize (a) } 
+    \makebox[0.190\textwidth]{\footnotesize (b) } 
+    \makebox[0.190\textwidth]{\footnotesize (c) } 
+    \makebox[0.190\textwidth]{\footnotesize (d) } 
+    \\
+\end{minipage}
+\quad
+\begin{minipage}[c]{0.50\textwidth} \centering
+\resizebox{\textwidth}{!}{%
+    \huge
+    \begin{tabular}{c|*{2}{cc}|*{1}{cc}cc}
+        \toprule
+        & \multicolumn{4}{c}{\textit{alumina-oxide}}
+        & \multicolumn{4}{c}{\textit{beige-fabric}}
+        \\
+        & \multicolumn{2}{c}{\makebox[0.3\textwidth]{LCNet}}
+       & \multicolumn{2}{c|}{\makebox[0.3\textwidth]{\gcnetacronym}}
+        & \multicolumn{2}{c}{\makebox[0.3\textwidth]{LCNet}}
+        & \multicolumn{2}{c}{\makebox[0.3\textwidth]{\gcnetacronym}}
+        \\
+        input  & dir.    & int.  &  dir.    & int. & dir.    & int.  &  dir.    & int. \\
+        \midrule
+        (a) & 4.29 & 0.054 & \B{1.35} & \B{0.025} & 4.54 & 0.051 & \B{2.29} & \B{0.026} \\
+        (b) & 3.83 & 0.050 & \B{1.71} & \B{0.023} & 4.45 & 0.044 & \B{2.00} & \B{0.029} \\
+        (c) & 3.75 & 0.042 & \B{2.46} & \B{0.024} & 4.97 & 0.044 & \B{3.13} & \B{0.025} \\
+        (d) & 4.04 & 0.047 & \B{2.84} & \B{0.026} & 4.55 & 0.051 & \B{3.46} & \B{0.025} \\
+        \bottomrule
+    \end{tabular}
+}
+\end{minipage}

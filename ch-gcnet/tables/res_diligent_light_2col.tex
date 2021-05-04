@@ -1,0 +1,45 @@
+    \centering
+    \resizebox{\textwidth}{!}{%
+        \large
+        \begin{tabular}{l|*{10}{cc}*{2}{c}}
+            \toprule
+            & \multicolumn{1}{c}{\includegraphics[height=0.12\textwidth]{ch-gcnet/images/Datasets/DiLiGenT/ballPNG_001.png}}
+            & \multicolumn{1}{c}{\makebox[0.12\textwidth]{\includegraphics[height=0.12\textwidth]{ch-gcnet/images/Datasets/DiLiGenT/catPNG_001.png}}}
+            & \multicolumn{1}{c}{\includegraphics[height=0.07\textwidth]{ch-gcnet/images/Datasets/DiLiGenT/pot1PNG_001.png}}
+            & \multicolumn{1}{c}{\includegraphics[height=0.12\textwidth]{ch-gcnet/images/Datasets/DiLiGenT/bearPNG_001.png}}
+            & \multicolumn{1}{c}{\includegraphics[height=0.10\textwidth]{ch-gcnet/images/Datasets/DiLiGenT/pot2PNG_001.png}}
+            & \multicolumn{1}{c}{\includegraphics[height=0.12\textwidth]{ch-gcnet/images/Datasets/DiLiGenT/buddhaPNG_001.png}}
+            & \multicolumn{1}{c}{\includegraphics[height=0.10\textwidth]{ch-gcnet/images/Datasets/DiLiGenT/gobletPNG_001.png}}
+            & \multicolumn{1}{c}{\includegraphics[height=0.12\textwidth]{ch-gcnet/images/Datasets/DiLiGenT/readingPNG_001.png}}
+            & \multicolumn{1}{c}{\includegraphics[height=0.10\textwidth]{ch-gcnet/images/Datasets/DiLiGenT/cowPNG_001.png}}
+            & \multicolumn{1}{c}{\includegraphics[height=0.08\textwidth]{ch-gcnet/images/Datasets/DiLiGenT/harvestPNG_001.png}}
+            \vspace{-0.5em}
+            \\
+            Method 
+             & \multicolumn{1}{c}{\emphobject{Ball}} 
+             & \multicolumn{1}{c}{\emphobject{Cat}}
+             & \multicolumn{1}{c}{\emphobject{Pot1}} 
+             & \multicolumn{1}{c}{\emphobject{Bear}} 
+             & \multicolumn{1}{c}{\emphobject{Pot2}} 
+             & \multicolumn{1}{c}{\emphobject{Buddha}} 
+             & \multicolumn{1}{c}{\emphobject{Goblet}} 
+             & \multicolumn{1}{c}{\emphobject{Reading}} 
+             & \multicolumn{1}{c}{\emphobject{Cow}}            
+             & \multicolumn{1}{c}{\emphobject{Harvest}}   
+             & \multicolumn{1}{c}{Average}  \\
+
+            \midrule
+            \multicolumn{12}{c}{Light Direction Estimation}    \\
+            \midrule
+            PF14~\cite{papad14closed} & 4.90  & 5.31  & 2.43  & 5.24  & 13.52 & 9.76  & 33.22 & 21.77 & 16.34 & 24.99 & 13.75 \\
+            LCNet & 3.27	 & \B{4.08}	 & 5.44	& 3.47	& 2.87	& 4.34	& 10.36 & \B{4.50}	 & 4.52	 & 6.32	& 4.92   \\
+            \gcnetacronym & \B{1.75}	& 4.58	& \B{1.41}	& \B{2.44}	& \B{2.81}	& \B{2.86} & \B{2.98} & 5.47	& \B{3.15}	& \B{5.74}	& \B{3.32} \\
+            \midrule
+            \multicolumn{12}{c}{Light Intensity Estimation}    \\
+            \midrule
+            PF14~\cite{papad14closed} & \B{0.017} & 0.098     & 0.044     & \B{0.053} & 0.223     & 0.122  & 0.074 & 0.156  & 0.088 & \B{0.059} & \B{0.036} \\
+            LCNet                     & 0.039  	  & 0.095	  & 0.058	  & 0.061     & \B{0.048} & 0.048	 & 0.067	& 0.105	& 0.073	 & 0.082	 & 0.068  \\
+            \gcnetacronym             & 0.027     & \B{0.075} & \B{0.039} & 0.101     & 0.059 	  & \B{0.032} 	& \B{0.042} & \B{0.048} & \B{0.031} & 0.065   & 0.052 \\
+             \bottomrule
+        \end{tabular}
+    }

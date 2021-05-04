@@ -1,0 +1,28 @@
+\centering
+\begin{minipage}{0.7\textwidth} \centering
+    \includegraphics[height=0.170\textwidth]{ch-gcnet/images/Datasets/Synthetic/bunny_uniform__gm} %
+    \includegraphics[height=0.170\textwidth]{ch-gcnet/images/Results/Synthetic/ramp_border.jpg} %
+    \includegraphics[height=0.170\textwidth]{ch-gcnet/images/Datasets/Synthetic/bunny_ramp__gm} %
+    \includegraphics[height=0.170\textwidth]{ch-gcnet/images/Results/Synthetic/irregular.png} %
+    \includegraphics[height=0.170\textwidth]{ch-gcnet/images/Datasets/Synthetic/bunny_irregular2__gm} 
+    \vspace{-0.5em}
+    \\
+    \makebox[0.170\textwidth]{\footnotesize (a) Uniform} 
+    \makebox[0.360\textwidth]{\footnotesize (b) Ramp} 
+    \makebox[0.360\textwidth]{\footnotesize (c) Irregular} 
+    \\
+\end{minipage}
+\begin{minipage}{0.7\textwidth} \centering
+\resizebox{\textwidth}{!}{
+\large
+\begin{tabular}{l|*{2}{c}|*{2}{c}|*{2}{c}}
+    \toprule
+    & \multicolumn{2}{c|}{Uniform} & \multicolumn{2}{c|}{Ramp} & \multicolumn{2}{c}{Irregular}\\
+    Model  & Direction  & Intensity  &  Direction & Intensity   &  Direction    & Intensity\\
+    \midrule
+    LCNet   & 4.88 & 0.066  & 6.09 & 0.066 & 6.00 & 0.075 \\   %
+    \gcnetacronym & \B{2.44} & \B{0.046}  & \B{4.16} & \B{0.043} & \B{3.68} & \B{0.050} \\  %
+    \bottomrule
+\end{tabular}
+}
+\end{minipage}

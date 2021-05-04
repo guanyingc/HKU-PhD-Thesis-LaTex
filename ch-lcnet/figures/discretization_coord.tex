@@ -1,0 +1,51 @@
+\tdplotsetmaincoords{70}{100}
+\pgfmathsetmacro{\rvec}{1}
+\pgfmathsetmacro{\thetavec}{52}
+\pgfmathsetmacro{\phivec}{45}
+\pgfmathsetmacro{\dev}{18}
+\pgfmathsetmacro{\tha}{\thetavec-\dev}
+\pgfmathsetmacro{\thb}{\thetavec+\dev}
+\pgfmathsetmacro{\phia}{\phivec-\dev}
+\pgfmathsetmacro{\phib}{\phivec+\dev}
+
+\begin{tikzpicture}[scale=2.2,tdplot_main_coords]
+    \coordinate (O) at (0,0,0); %
+    \draw[->] (0,0,0) -- (1,0,0) node[below=0.5ex,left=-0.4ex]{$z$};
+    \draw[->] (0,0,0) -- (0,1,0) node[right=-0.4ex]{$x$};
+    \draw[->] (0,0,0) -- (0,0,1) node[above=-0.4ex]{$y$};
+    \draw[dashed,color=gray] (0,0,0) -- (0,0,-1);
+    \draw[dashed,color=gray] (0,0,0) -- (0,-1,0);
+    \tdplotdrawarc[semithick,dashed,color=gray]{(O)}{1}{-90}{90}{}{}
+    \tdplotsetthetaplanecoords{90}
+    \tdplotdrawarc[semithick,dashed,color=gray,tdplot_rotated_coords]{(0,0,0)}{1}{0}{360}{}{}
+
+    \tdplotsetcoord{P}{\rvec}{\thetavec}{\phivec} %
+    \draw[thick,-stealth,color=black] (O) -- (P) node[below=0.2ex,right=-1.0ex] {$P$};
+
+    \tdplotsetcoord{Pa}{\rvec}{\tha}{\phia}
+    \tdplotsetcoord{Pb}{\rvec}{\tha}{\phib}
+    \tdplotsetcoord{Pc}{\rvec}{\thb}{\phia}
+    \tdplotsetcoord{Pd}{\rvec}{\thb}{\phib}
+    \tdplotsetcoord{Pf}{\rvec}{\tha}{\phivec}
+
+    \draw[color=black] (O) -- (Pa) node[above=0.2ex,left=-0.7ex] {\color{black!90}\scriptsize $A$};
+    \draw[color=black] (O) -- (Pb) node[above,right=-0.3ex] {\color{black!90}\scriptsize $B$};
+    \draw[color=black] (O) -- (Pc) node[below=1.2ex,left=-0.9ex] {\color{black!90}\scriptsize $C$};
+    \draw[color=black] (O) -- (Pd) node[below=0.2ex,right=-0.3ex] {\color{black!90}\scriptsize $D$};
+    \draw[color=blue,dashed] (O) -- (Pf) node[above left] {};
+
+    \draw[semithick,color=red] (Pa) to  (Pb) node[below left] {};
+    \draw[semithick,color=red] (Pd) to  (Pc) node[below left] {};
+
+    \tdplotsetthetaplanecoords{\phivec}
+    \tdplotdrawarc[thick,color=blue,opacity=0.8,tdplot_rotated_coords]{(0,0,0)}{0.7}{\tha}{\thetavec}{above=0.7ex,right=-0.7ex}{\small $\delta$}
+    \tdplotsetthetaplanecoords{\phia}
+    \tdplotdrawarc[semithick,color=red,tdplot_rotated_coords]{(0,0,0)}{\rvec}{\tha}{\thb}{anchor=south west}{}
+    \tdplotdrawarc[dashed,tdplot_rotated_coords]{(0,0,0)}{\rvec}{0}{\tha}{anchor=south west}{}
+    \tdplotdrawarc[dashed,tdplot_rotated_coords]{(0,0,0)}{\rvec}{\thb}{180}{anchor=south west}{}
+    \tdplotsetthetaplanecoords{\phib}
+    \tdplotdrawarc[semithick,color=red,tdplot_rotated_coords]{(0,0,0)}{\rvec}{\tha}{\thb}{anchor=south west}{}
+    \tdplotdrawarc[dashed,tdplot_rotated_coords]{(0,0,0)}{\rvec}{0}{\tha}{anchor=south west}{}
+    \tdplotdrawarc[dashed,tdplot_rotated_coords]{(0,0,0)}{\rvec}{\thb}{180}{anchor=south west}{}
+
+\end{tikzpicture}

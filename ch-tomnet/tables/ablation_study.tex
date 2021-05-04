@@ -1,0 +1,26 @@
+    \resizebox{0.8\textwidth}{!}{
+        \begin{tabular}{cl*{4}{c}} %
+        \toprule
+        ID & Model Variants & \cellcolor{red!25}F-EPE  & \cellcolor{red!25}A-MSE & \cellcolor{red!25}I-MSE &  \cellcolor{blue!25}M-IoU \\ 
+        \midrule
+        0 & Background                         & 6.5 / 41.0 & 1.58 & 0.87 & 0.15 \\
+        1 & CoarseNet - ($\mathL^c_{fr}$) & 3.9 / 26.5 & 0.24 & 0.23 & 0.98 \\
+        2 & CoarseNet - (cross-link)           & 2.5 / 17.2 & 0.30 & 0.21 & 0.97  \\
+        3 & CoarseNet - (multi-scale)          & 2.4 / 16.6 & 0.69 & 0.25 & 0.94 \\
+        4 & CoarseNet - ($\mathL^c_{ir}$) & 2.3 / 15.7 & 0.25 & 0.22 & 0.98 \\
+        5 & CoarseNet                          & \textbf{2.2 / 15.4} & 0.28 & 0.18 & 0.97 \\
+        \midrule
+        6 & CoarseNet + RefineNet              & \textbf{2.0 / 13.7} & 0.25 & 0.19 & 0.97 \\
+        7 & CoarseNet + (RefineNet+$\mathL^r_{ir}$) & 2.0 / 13.9 & 0.24 & 0.18 & 0.97 \\
+        \bottomrule
+    \end{tabular}
+    }
+    \resizebox{0.17\textwidth}{!}{
+        \begin{tabular}{ccc}
+            \midrule
+            MSE ($\cdot10^{-2}$)  \\
+            \cellcolor{red!25} $\downarrow$ better \\
+            \cellcolor{blue!25} $\uparrow$ better \\
+            \midrule
+        \end{tabular}
+    }

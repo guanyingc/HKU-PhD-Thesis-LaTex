@@ -1,0 +1,28 @@
+\resizebox{\textwidth}{!}{%
+        \begin{tabular}{l|*{6}{cc}cc}
+            \toprule
+            & \multicolumn{2}{c}{\includegraphics[height=0.09\textwidth]{ch-gcnet/images/Datasets/LightStage/helmet_side_left_helmet_side_left_0192.jpg}}
+            & \multicolumn{2}{c}{\includegraphics[height=0.09\textwidth]{ch-gcnet/images/Datasets/LightStage/plant_left_plant_left_0021.jpg}}
+            & \multicolumn{2}{c}{\includegraphics[height=0.09\textwidth]{ch-gcnet/images/Datasets/LightStage/knight_fighting_knight_fighting_057_crop.png}}
+            & \multicolumn{2}{c}{\includegraphics[height=0.09\textwidth]{ch-gcnet/images/Datasets/LightStage/knight_kneeling_knight_kneeling_048.jpg}}
+            & \multicolumn{2}{c}{\includegraphics[height=0.09\textwidth]{ch-gcnet/images/Datasets/LightStage/knight_standing_knight_standing_116.jpg}}
+            & \multicolumn{2}{c}{\includegraphics[height=0.09\textwidth]{ch-gcnet/images/Datasets/LightStage/helmet_front_left_helmet_front_left_0082.jpg}}
+            \vspace{-0.5em}
+            \\
+            & \multicolumn{2}{c}{\makebox[0.18\textwidth]{\makecell{\emphobject{Helmet} \\ \emphobject{Side}}}}
+            & \multicolumn{2}{c}{\makebox[0.18\textwidth]{\makecell{\emphobject{Plant}}}}
+            & \multicolumn{2}{c}{\makebox[0.18\textwidth]{\makecell{\emphobject{Fighting} \\ \emphobject{Knight}}}}
+            & \multicolumn{2}{c}{\makebox[0.18\textwidth]{\makecell{\emphobject{Kneeling} \\ \emphobject{Knight}}}}
+            & \multicolumn{2}{c}{\makebox[0.18\textwidth]{\makecell{\emphobject{Standing} \\ \emphobject{Knight}}}}
+            & \multicolumn{2}{c}{\makebox[0.18\textwidth]{\makecell{\emphobject{Helmet} \\ \emphobject{Front}}}}
+            & \multicolumn{2}{c}{\makebox[0.18\textwidth]{Average}} 
+            \\
+            \makebox[0.12\textwidth]{model\hfill}  & Dir.    & Int.  & Dir.    & Int. & Dir.    & Int. & Dir.    & Int. & Dir.    & Int. & Dir.    & Int. & Dir.    & Int. \\
+            \midrule
+            PF14~\cite{papad14closed} & 25.40   & 0.576     & 20.56     & 0.227    & 69.50    & 1.137     & 46.69    & 9.805     & 33.81    & 1.311     & 81.60    & \B{0.133} & 46.26   & 2.198    \\
+            LCNet & 6.57	& 0.212	    & 16.06	    & 0.170	   & 15.95 	  & 0.214	  & 19.84	 & 0.199	 & 11.60    & 0.286	    & 11.62	   & 0.248	  & 13.61    & 0.221      \\
+            \gcnetacronym               & \B{5.33}& \B{0.096} & \B{10.49} & \B{0.154}& \B{13.42}& \B{0.168} & \B{14.41}& \B{0.181} & \B{5.31} & \B{0.198} & \B{6.22} & 0.183     & \B{9.20} & \B{0.163} \\
+            \bottomrule
+        \end{tabular}
+}
+

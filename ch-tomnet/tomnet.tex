@@ -1,0 +1,594 @@
+\newcommand{\TOMNetTrimap}{TOM-Net$^{\text{+Trimap}}$\xspace}
+\newcommand{\TOMNetBg}{TOM-Net$^{\text{+Bg}}$\xspace}
+\chapter{Learning Transparent Object Matting}
+\label{ch:tomnet}
+
+\section{Introduction}
+Image matting refers to the process of extracting the foreground matte of an image by locating the region of the foreground object and estimating the opacity of each pixel inside the foreground region. The foreground object can then be composited onto a new background image using the \emph{matting equation}~\cite{smith1996blue} 
+\begin{equation}
+    \label{eq:alphamatte}
+    C = F + (1-\alpha)B,  \quad \alpha \in [0, 1],
+\end{equation}
+where $C$ denotes the composited color, $F$ the foreground color, $B$ the background color, and $\alpha$ the opacity.
+
+Image matting has been widely used in image editing and film production. However, most of the existing methods are tailored for opaque objects, and cannot handle transparent objects whose appearance depends on how light is refracted from the background.
+
+To model the effect of refraction, Zongker~\etal~\cite{zongker1999environment} introduced \emph{environment matting} as 
+\begin{equation}
+    \label{eq:em_general}
+    C = F + (1-\alpha)B + \Phi, \quad \alpha \in [0, 1],
+\end{equation}
+where $\Phi$ is the contribution of environment light caused by refraction or reflection at the foreground object. Besides estimating the foreground shape, environment matting also describes how objects interact with the background. 
+
+\begin{figure}[t] \centering
+    \includegraphics[width=\textwidth]{ch-tomnet/images/Method/Intro_network_intro_v3}
+    \caption[Learning transparent object matting]{Learning transparent object matting. Given an image of a transparent object as input, our model can estimate the environment matte (consisting of an object mask, an attenuation mask, and a refractive flow field) in a feed-forward pass. The transparent object can then be composited onto new background images with the extracted matte.}
+    \label{fig:intro}
+\end{figure}
+
+Many efforts~\cite{chuang2000environment,wexler2002image,peers2003wavelet,zhu2004frequency,duan2011flexible,duan2015compressive} have been devoted to improving the seminal work of~\cite{zongker1999environment}. The resulting methods often require either a huge number of input images to achieve a higher accuracy, or the use of specially designed patterns to reduce the number of required images. They are in general all very computational expensive.
+
+In this work, we focus on environment matting for transparent objects. It is highly ill-posed, if not impossible, to estimate an accurate environment matte for transparent objects from a single image with an arbitrary background. Given the huge solution space, there exist multiple objects and backgrounds which can produce the same refractive effect. In order to make the problem more tractable, we simplify our problem to estimating an environment matte that can produce visually realistic refractive effect from a single image, instead of estimating a highly accurate refractive flow. We define the environment matte in our model as a triplet consisting of an object mask, an attenuation mask, and a refractive flow field. Realistic refractive effect can then be obtained by compositing the transparent object onto new background images (see \fref{fig:intro}). We then show that the performance of the proposed method can be improved when a trimap or a background image is available.
+
+Inspired by the great successes of convolutional neural networks (CNNs) in high-level computer vision tasks, we propose a convolutional neural network, called TOM-Net, for simultaneous learning of an object mask, an attenuation mask, and a refractive flow field from a single image with an arbitrary background. The key contributions of this work can be summarized as follows:
+
+\begin{itemize}
+  \item We introduce a simple and efficient model for transparent object matting as simultaneous estimation of an object mask, an attenuation mask, and a refractive flow field.
+  \item We propose a convolutional neural network, TOM-Net, to learn an environment matte of a transparent object from a single image. To the best of our knowledge, TOM-Net is the first CNN that is capable of learning transparent object matting.
+  \item We create a large-scale synthetic dataset and a real dataset as a benchmark for learning transparent object matting. Our TOM-Net has produced promising results on both the synthetic and real datasets.
+  \item We propose two additional convolutional neural networks, denoted as \TOMNetTrimap and \TOMNetBg, for handling the cases where a trimap or a background image is available, respectively.
+\end{itemize}  
+
+Preliminary results of this chapter were published in~\cite{chen2018tomnet,chen2019learning}.
+Our code, trained models, and datasets can be found at \url{https://guanyingc.github.io/TOM-Net}.
+
+\section{Related Work}
+\label{sec:related_work}
+In this section, we briefly review representative works on environment matting and recent works on CNN based image matting. 
+
+\paragraph{Environment matting}
+\label{par:Environment Matting}
+Zongker~\etal~\cite{zongker1999environment} introduced the concept of environment matting, and assumed each foreground pixel being originated from a single rectangular region of the background. They obtained the environment matte by identifying the corresponding background region for each foreground pixel using three monitors and multiple images. Chuang~\etal~\cite{chuang2000environment} extended~\cite{zongker1999environment} in two different ways. First, they replaced the single rectangular supporting area for a foreground pixel with multiple 2D oriented Gaussian strips. This makes it possible for their method to model the effects of color dispersion, multiple mapping, and glossy reflection. Second, they simplified the environment matting equation by assuming the object being colorless and perfectly transparent. This allows them to achieve real time capture environment matting (RTCEM). The environment matte was then extracted with one image taken in front of a pre-designed pattern. However, RTCEM requires background images to segment the transparent objects, and depends on a time-consuming off-line processing. 
+
+Wexler~\etal~\cite{wexler2002image} introduced a probabilistic model based method which assumes each background point has a probability to make contribution towards the color of a certain foreground point. Their approach does not require pre-designed patterns during data acquisition, but it still needs multiple images and can only model thin transparent objects. Peers and Dutr{\'e}~\cite{peers2003wavelet} used a large number of wavelet basis backgrounds to obtain the environment matte, and their method can also model the effect of diffuse reflection. Based on the fact that a signal can be decomposed uniquely in the frequency domain, Zhu and Yang~\cite{zhu2004frequency} proposed a frequency-based approach to extract an accurate environment matte. They used Fourier analysis to solve the decomposition problem. Both~\cite{peers2003wavelet} and~\cite{zhu2004frequency} require a large number of images to extract the matte (\eg,~\cite{peers2003wavelet} needs $2,400$ images and~\cite{zhu2004frequency} needs $4,096$ images for an image of size $1024\times 1024$), making them not very practical. Recently, compressive sensing theory has been applied to environment matting to reduce the number of images required. Duan~\etal~\cite{duan2011fast} applied this theory in  the spatial domain and Qian~\etal~\cite{qian2015frequency} applied it in the frequency domain. However, the number of images needed is still in the order of hundreds. In contrast, our work can estimate an environment matte from a single image in a fast feed-forward computation without the need for pre-designed patterns or additional background images.
+
+\begin{sidewaystable}[htbp]
+    \caption[Comparison of different environment matting methods]{Comparison of different environment matting methods. $k$ indicates the image size and mapping type stands for how a foreground point is composited by the point(s) in the background image.}
+    \label{tab:related_work}
+    \input{ch-tomnet/tables/comparisons}
+\end{sidewaystable}
+
+Yeung~\etal~\cite{yeung2011matting} proposed an interactive way to estimate an environment matte given an image containing a transparent object. Their method requires users to manually mark the foreground and background in the image, and models the refractive effect using a thin-plate-spline transformation. Their method does not produce an accurate environment matte, but instead a visually pleasing refractive effect. Our method shares the same spirit, but does not involve any human interaction. 
+
+\Tref{tab:related_work} shows a comparison of different environment matting methods. Compared with other methods, our method requires only a single image and can extract a matte in $0.5$ second without the need for any predefined backgrounds.
+
+\paragraph{CNN based image matting}
+Although the potential of CNN on transparent object matting has not yet been explored, some existing work have adopted CNNs for solving the traditional image matting problem. Shen~\etal~\cite{shen2016deep} introduced a CNN for image matting of color portrait images. Cho~\etal~\cite{cho2016natural} proposed a network to predict a better alpha matte by taking the matting results of the traditional method and normalized color images as input. 
+Some deep learning methods~\cite{xu2017deep,zhang2019late,lu2019indices} have been introduced to estimate an alpha matte given an image and its trimap. 
+However, none of these methods can be applied directly to the task of transparent object matting as object opacity alone is not sufficient to model the refractive effect. 
+
+\section{Matting Formulation}
+\label{sec:formulation}
+As a transparent object may have multiple optical properties (\eg, color attenuation, translucency, and reflection), estimating an accurate environment matte for a generic transparent object from a single image is very challenging. 
+Following the work of~\cite{chuang2000environment}, we cast environment matting to a refractive flow estimation problem by assuming that each foreground pixel only originates from one point in the background due to refraction. Compared to the seminal work of~\cite{zongker1999environment}, which models each foreground pixel as a linear combination of a patch in the background, our formulation is more tractable and can be easily encoded using a CNN.
+
+In~\cite{zongker1999environment}, the per-pixel environment matting is obtained through leveraging color information from multiple background images. Given a set of pre-designed background patterns, matting is formulated as
+\begin{equation}
+    \label{eq:em_origin}
+    C = F + (1-\alpha)B + \sum_{i=1}^{k} R_i \mathcal{M}(\mathbf{T}_i, \mathbf{A}_i),
+\end{equation}
+where $F$, $B$ and $\alpha$ denote the ambient illumination, background color and opacity, respectively. The last term in \eref{eq:em_origin} accounts for the environment light accumulated from $k$ pre-designed background images ($k=3$ in~\cite{zongker1999environment}). $R_i$ is a factor describing the contribution of light emanating from the $i$-$th$ background image $\mathbf{T}_i$. $\mathcal{M}(\mathbf{T}_i, \mathbf{A}_i)$ denotes the average color of a rectangular region $\mathbf{A}_i$ on the background image $\mathbf{T}_i$. 
+
+To obtain an environment matte, the transparent object is placed in front of the monitor(s), and multiple pictures of the object are captured with the monitor(s) displaying different background patterns\footnote{For an image of size $512\times 512$, $18$ pictures and around $20$ minutes processing time are needed.}. 
+Generally, a surface point receives light from multiple directions, especially for a diffuse surface. When it comes to a perfectly transparent object, however, a surface point will only receive light from one direction as determined by the law of refraction. Consider a single background image as the only light source (\ie, no ambient illumination), the problem can be modeled as
+\begin{equation}
+    \label{eq:em_simplify1}
+    C = (1-\alpha)B + R \mathcal{M}(\mathbf{T}, P),
+\end{equation}
+where $\mathcal{M}(\mathbf{T}, P)$ is a bilinear sampling operation at location $P$ on the background image $\mathbf{T}$. Further, by assuming a colorless transparent object, $R$ becomes a  light attenuation index $\rho$ (a scalar value). The formulation in \eref{eq:em_simplify1} can be simplified to
+\begin{equation}
+    \label{eq:em_simplify2}
+    C = (1-\alpha)B + \rho \mathcal{M}(\mathbf{T}, P),
+\end{equation}
+where $\rho \in [0, 1]$ denotes the attenuation index.
+
+Here, we use refractive flow to model the refractive effect of a transparent object. The refractive flow of a foreground pixel is defined as the offset between the foreground pixel and its refraction correspondence on the background image. 
+
+We further introduce a binary foreground mask to define the object region in the image. The matting equation can now be rewritten as
+\begin{equation}
+    \label{eq:em_simplify3}
+    C = (1 - m) B + m\rho \mathcal{M}(\mathbf{T}, P),
+\end{equation}
+where $m \in\{0, 1\}$ denotes background ($m = 0$) or foreground ($m = 1$). The matte can then be estimated by solving $m$, $\rho$ and $P$ for each pixel in the input image containing the transparent 
+object\footnote{For an image with $n$ pixel, we have $7$ unknowns ($3$ for $B$, $2$ for $P$, $1$ for $m$, and $1$ for $\rho$) for each pixel, resulting in a total of $7n$ unknowns.}.
+
+
+\section{Learning Transparent Object Matting}
+\label{sec:method}
+In this section, we present a two-stage deep learning framework, called TOM-Net, for learning transparent object matting (see \fref{fig:networkStructure}). The first stage, denoted as CoarseNet, is a multi-scale encoder-decoder network that takes a single image as input, and predicts an object mask, an attenuation mask, and a refractive flow field simultaneously. CoarseNet is capable of predicting a robust object mask. However, the estimated attenuation mask and refractive flow field lack local structural details. 
+To overcome this problem, we introduce the second stage of TOM-Net, denoted as RefineNet, to achieve a sharper attenuation mask and a more detailed refractive flow field. RefineNet is a residual network~\cite{he2016deep} that takes both the input image and the output of CoarseNet as input. After training, our TOM-Net can predict an environment matte from a single image in a fast feed-forward pass.
+
+\begin{figure}[tbp] \centering
+    \includegraphics[width=\textwidth]{ch-tomnet/images/Method/TOMNet_framework.pdf}
+    \caption[Network architecture of TOM-Net]{Network architecture of TOM-Net. The upper subnetwork is the CoarseNet and the bottom subnetwork is the RefineNet. (Cross-link and multi-scale outputs are not shown for simplicity.)} \label{fig:networkStructure}
+\end{figure}
+
+\subsection{Encoder-Decoder for Coarse Prediction}
+\label{sub:Encoder-decoder Net for Coarse Prediction}
+The first stage of our TOM-Net (\ie, CoarseNet) is based on mirror-link CNN introduced in~\cite{shi2016learning}. Mirror-link CNN was proposed to learn non-Lambertian object intrinsic decomposition. Its output consists of an albedo map, a shading map, and a specular map. It shares a similar output structure with our transparent object matting task (\ie, three output branches sharing the same spatial dimensionality). Therefore, it is reasonable for us to adapt mirror-link CNN for our CoarseNet. 
+
+The mirror-link CNN adapted for our CoarseNet consists of one shared encoder and three distinct decoders. The encoder contains six down-sampling convolutional blocks, leading to a down-sampling factor of $64$ in the bottleneck layer. Features in the encoder layers are connected to the decoder layers having the same spatial dimensions through skip connections~\cite{ronneberger2015u}. Cross-links~\cite{shi2016learning} are introduced to make different decoders share the same input in each layer, so that decoders can better utilize the correlation between different predictions.
+
+Learning with multi-scale loss has been proven to be helpful in dense prediction tasks (\eg,~\cite{eigen2014depth,fischer2015flownet}). Since we formulate the problem of transparent object matting as refractive flow estimation, which is a dense prediction task, we augment our mirror-link CNN with multi-scale loss similar to~\cite{fischer2015flownet}. 
+We use four different scales in our model, where the first scale starts from the decoder features with a down-sampling factor of $8$ and the largest scale has the same spatial dimensions as the input.
+
+In contrast to the recent two-stage framework for image matting~\cite{xu2017deep}, our TOM-Net has a shared encoder and three parallel decoders to accommodate different outputs. Besides, we augment our CoarseNet with multi-scale loss and cross-link. Moreover, TOM-Net is trained from scratch while the encoder in~\cite{xu2017deep} is initialized with the pre-trained VGG16.
+
+\newcommand{\mathL}{\mathcal{L}}
+\subsection{Loss Function for Coarse Stage}
+\label{sub:Loss Function for CoarseNet}
+CoarseNet takes a single image as input and predicts the environment matte as a triplet consisting of an object mask, an attenuation mask, and a refractive flow field. The learning of CoarseNet is supervised by the ground-truth matte using an object \textbf{m}ask \textbf{s}egmentation loss $\mathL_{ms}$, an \textbf{a}ttenuation \textbf{r}egression loss $\mathL_{ar}$, and a refractive \textbf{f}low \textbf{r}egression loss $\mathL_{fr}$. Besides, the predicted matte is expected to render an image as close to the input image as possible when applied to the ground-truth background based on \eref{eq:em_simplify3}. Hence, in addition to the supervision of the matte, we also take \textbf{i}mage \textbf{r}econstruction loss $\mathL_{ir}$ into account (bilinear sampling is implemented following~\cite{jaderberg2015spatial}). Note that the ground-truth background is only used to calculate the reconstruction error during training but not needed during testing. CoarseNet can therefore be trained by minimizing 
+\begin{align}
+    \mathL^c = \alpha^c_{ms} \mathL_{ms} + \alpha^c_{ar} \mathL_{ar} + \alpha^c_{fr} \mathL_{fr} + \alpha^c_{ir} \mathL_{ir},
+\end{align}
+where 
+$\alpha^c_{ms}, \alpha^c_{ar}, \alpha^c_{fr}, \alpha^c_{ir}$ are weights for the corresponding loss terms. 
+
+\paragraph{Object mask segmentation loss}
+\label{par:Object Mask Classification Loss}
+Object mask segmentation is simply a spatial binary classification problem. The output of the object mask decoder has a dimension of $2\times H\times W$, where $H$ and $W$ denote the height and width of the input. We normalize the output with {\em softmax} and compute the loss using the binary cross-entropy function
+\begin{equation}
+    \mathL_{ms} = -\frac{1}{HW} \sum_{ij} (\tilde{M}_{ij}\log(P_{ij}) + (1-\tilde{M}_{ij}) \log(1-P_{ij})),
+\end{equation}
+where $\tilde{M}_{ij} \in \{0,1\}$ and $P_{ij}\in [0,1]$ represent ground truth and normalized foreground probability of the pixel at $(i, j)$, respectively.
+
+\paragraph{Attenuation regression loss} 
+The predicted attenuation mask has a dimension of  $1\times H\times W$. The value of this mask is in the range of $[0, 1]$, where $0$ indicates no light can pass and $1$ indicates the light will not be attenuated. 
+We adopt a mean square error (MSE) loss
+\begin{equation}
+    \mathL_{ar} = \frac{1}{HW} \sum_{ij} (A_{ij}-\tilde{A}_{ij})^2,
+\end{equation}
+where $A_{ij}$ is the predicted attenuation index and $\tilde{A}_{ij}$ the ground truth at $(i, j)$.
+\paragraph{Refractive flow regression loss}
+\label{par:Disparity Smoothness Loss}
+The predicted refractive flow field has a dimension of $2\times H\times W$, where we have one channel for the horizontal displacement and another for the vertical displacement. We normalize the refractive flow with $tanh$ activation and multiply it by the width of the input, such that the output is constrained in the range of $[-W, W]$.
+We adopt an average end-point error (EPE) loss
+\begin{equation}
+    \mathL_{fr} = \frac{1}{HW} \sum_{ij} \sqrt{(F^x_{ij}-\tilde{F}^x_{ij})^2 + (F^y_{ij}-\tilde{F}^y_{ij})^2},
+\end{equation}
+where $(F^x, F^y)$ and $(\tilde{F}^x, \tilde{F}^y)$ denote the predicted flow and the ground truth, respectively.
+
+\paragraph{Image reconstruction loss}
+\label{par:Image Reconstruction Loss}
+We use MSE loss to measure the dissimilarity between the reconstructed image and the input image. 
+Denoting the reconstructed image by $I$ and the ground-truth image (\ie, the input image) by $\tilde{I}$, the reconstruction loss is given by
+\begin{equation}
+    \mathL_{ir} = \frac{1}{HW} \sum_{ij} \Vert I_{ij}-\tilde{I}_{ij}\Vert_2^2.
+\end{equation}
+
+\paragraph{Implementation details}
+\label{par:Implementation Details}
+In all experiments, we empirically set $\alpha^c_{ms}=0.1, \alpha^c_{ar}=1, \alpha^c_{fr}=0.01,$ and $\alpha^c_{ir}=1$. The loss weights for different scales are $\frac{1}{2^{(4 -\text{s})}}$, where $s \in\{1,2,3,4\}$ denotes the scale. %
+CoarseNet contains $8$ million parameters and it takes about $2.5$ days to train with Adam optimizer~\cite{kingma2014adam} on a single NVIDIA Titan X Pascal GPU.  We first train the CoarseNet from scratch until convergence and then train the RefineNet. 
+
+\subsection{Residual Learning for Matte Refinement}
+\label{par:Residual Learning for Matte Refinement}
+As the attenuation mask and the refractive flow field predicted by the CoarseNet lack structural details, a refinement stage is needed to produce a detailed matte. Observing that residual learning is particularly suitable for tasks whose input and output are largely similar~\cite{kim2016accurate,Nah_2017_CVPR}, we propose a residual network, denoted as RefineNet, to refine the matte predicted by the CoarseNet. 
+Similar strategy has also been successfully applied to progressively refine the estimated optical flow in~\cite{ilg2017flownet}.
+
+We concatenate the input image and the output of the CoarseNet to form the input of the RefineNet. As the object mask predicted by the CoarseNet is already plausible, the RefineNet only outputs an attenuation mask and a refractive flow field. The parameters of the CoarseNet are fixed when training the refinement stage. 
+
+\paragraph{Loss for the refinement stage}
+\label{par:Loss for Refinement}
+The overall loss for the refinement stage is
+\begin{align}
+    \mathL^r = \alpha^r_{ar} \mathL_{ar} + \alpha^r_{fr} \mathL_{fr} ,
+\end{align}
+where $\mathL_{ar}$ is the refinement attenuation regression loss, $\mathL_{fr}$ the refinement flow regression loss,  and $\alpha^r_{ar}$, $\alpha^r_{fr}$ their weights. The definitions of these two losses are identical to those defined in the first stage. 
+We found that adding the image reconstruction loss in the refinement stage did reduce the image reconstruction error during training, but was not helpful in preserving sharp edges of the refractive flow field (\eg, mouth of a glass). This could be explained by the fact that a lower image reconstruction loss does not guarantee a better refractive flow field. As the matte estimated by the CoarseNet has already achieved a small reconstruction error, simultaneously optimizing the flow regression loss and image reconstruction loss in the refinement stage may compromise the flow estimation.
+Since our goal in the refinement stage is to estimate a more detailed matte, we remove the image reconstruction loss to make our network focus on reducing the flow regression loss.
+
+\paragraph{Implementation details}
+\label{par:Implementation Details}
+We set $\alpha^r_{ar}=1$, $\alpha^r_{fr}=1$ for the refinement. RefineNet contains $1$ million parameters and it takes about $2$ days to train with Adam optimizer on a single NVIDIA Titan X Pascal GPU. RefineNet is randomly initialized during training.
+\subsection{Improvement with Trimap and Background Image}
+\label{ssec:trimap}
+As the problem of transparent object matting from a single image is highly ill-posed, we investigate how to reinforce our framework by utilizing additional information. 
+In particular, we consider the cases where a trimap or a background image is available.
+Our framework can be easily extended to make use of these additional information by taking the concatenation of the input image and the background image (or trimap) as input, while keeping the overall network architecture unchanged.
+
+\paragraph{\TOMNetTrimap}
+Trimap can provide a rough location of the transparent object to help the model better locate the transparent object. The trimap used in this work is a single channel image with $3$ different values, where values $0$, $1$, and $2$ indicate background, unknown, and foreground regions, respectively.  
+During training, we randomly generate trimaps based on the ground-truth object mask. We first perform random erosion and cropping on the object mask to form the known (rough) foreground region. The unknown region is then generated by subtracting the foreground region from a tight bounding box of the object mask, leaving the rest of the regions as the background region.
+The variant model, denoted as \TOMNetTrimap, takes both the input image and trimap as input, giving rise to an input channel number of $4$ in the first convolutional layer. 
+
+\paragraph{\TOMNetBg}
+Given the background image, the model can easily identify the accurate location of the transparent object based on the difference of the input and background images. Moreover, having access to the background image allows the model to better estimate the refractive flow field.
+The variant model, denoted as \TOMNetBg, takes both the input and background images as input, giving rise to an input channel number of $6$ in the first convolutional layer.
+
+\TOMNetTrimap and \TOMNetBg are trained with the same procedure as \hbox{TOM-Net}.
+Our experimental results show that with the additional information, our framework can achieve better results on both synthetic and real dataset.
+
+\section{Dataset for Learning and Evaluation}
+\label{sec:dataset}
+Currently there is no off-the-shelf dataset for transparent object matting. 
+One potential direction is to create a real dataset with ground-truth mattes (\ie, object masks, attenuation masks, and refractive flow fields) for training. 
+However, it is almost impossible for human to manually label the refractive flow field of the transparent object.
+One may consider estimating the mattes using existing transparent object matting methods and using them as the ground truth for training.
+However, it is very difficult and tedious as traditional methods require a large number of images and/or a long processing time for each object. 
+Besides, there is no publicly available code for transparent object matting.
+To bypass this problem, we created a large-scale synthetic dataset using \emph{POV-Ray}~\cite{povray} to render images of synthetic transparent objects.
+Besides, we captured a real dataset for evaluation. We will show that our TOM-Net trained on the synthetic dataset can generalize well to real world objects, demonstrating its good transferability.
+
+\subsection{Synthetic Dataset} 
+\label{sub:Synthetic Dataset}
+
+\begin{figure}[tbp] \centering
+    \input{ch-tomnet/figures/syn_data_samples}
+    \caption[Examples of synthetic data]{Examples of synthetic data. Top to bottom: examples of \emph{Glass}, \emph{Glass with Water}, \emph{Lens} and \emph{Complex}, respectively. First three columns: background image, rendered image, refractive flow visualization (sparse). Last three columns: ground-truth refractive flow field, object mask, attenuation mask.} 
+    \label{fig:syn_data_samples}
+\end{figure}
+
+We used a large number of background images and 3D models to render our training samples. We randomly changed the pose of the models, as well as the viewpoint and focal length of the camera in the rendering process to avoid overfitting to a fixed setting.
+
+\paragraph{Background images}
+\label{par:Backgrounds Images}
+We employed two types of background images, namely scene images and synthetic patterns. For scene images, we randomly sampled images from the Microsoft COCO~\cite{lin2014microsoft} dataset\footnote{Other large-scale datasets like ImageNet~\cite{deng2009imagenet} can also be used.}. The background images for the synthetic training set are sampled from COCO Train2014 and Test2015, while that for the synthetic test dataset are from COCO Val2014, giving rise to $100K$ scene images in total. 
+For synthetic patterns, we rendered $40K$ patterns of size $512\times 512$ using \emph{POV-Ray} built-in textures. 
+
+\begin{table} \centering
+    \caption[Statistics of our synthetic datasets]{Statistics of our synthetic datasets.}
+    \label{tab:synth}
+    \resizebox{0.7\textwidth}{!}{
+    \Large
+    \begin{tabular}{l|*{4}{c}|c}
+        \toprule
+        Type & \emph{Glass} & \emph{Glass with Water} & \emph{Lens} & \emph{Complex} & Total \\
+        \midrule
+        Synthetic Train & $52K$ & $26K$ & $20K$ & $80K$ & $178K$\\
+        Synthetic Test   & $250$ & $250$ & $200$ & $200$ & $900$\\
+        \bottomrule
+    \end{tabular}
+    }
+\end{table}
+
+\paragraph{Transparent objects}
+\label{par:Transparent Object}
+We divided common transparent objects into four categories, namely \emph{Glass}, \emph{Glass with water}, \emph{Lens}, and \emph{Complex} shape (see \fref{fig:syn_data_samples} for examples). We constructed parametric 3D models for the first three categories, and generated a large number of models using random parameters. For complex shapes, we constructed parametric 3D models for basic shapes like sweeping-spheres and squashed surface of revolution (SOR) parts, and composed a larger number of models using these basic shapes. We generated $178K$ 3D models in total, with each model assigned a random refractive index $\lambda \in [1.3, 1.5]$. The distribution of these models in four categories is shown in \Tref{tab:synth}. 
+
+\paragraph{Ground-truth matte generation}
+\label{par:Ground Truth Generation}
+We obtained the ground-truth object mask of a model by rendering it in front of a black background image and setting its color to white. Similarly, we obtained the ground-truth attenuation mask of a model by simply rendering it in front of a white background image. Finally, we obtained the ground-truth refractive flow field (see \fref{fig:syn_data_samples}) of a model by rendering it in front of a sequence of Gray-coded patterns. Technical details for the data rendering can be found at \url{https://github.com/guanyingc/TOM-Net_Rendering}.
+
+
+\paragraph{Data augmentation}
+To improve the diversity of the training data and narrow the gap between real and synthetic data, extensive data augmentation was carried out on-the-fly. 
+For an image of size $512\times 512$ with color intensity normalized to $[0, 1]$, we randomly performed color (brightness, contrast and saturation) augmentation (in a range of $[-0.2, 0.2]$), image scaling (in a range of $[0.875, 1.05]$), noise perturbation (in a range of $[-0.05, 0.05]$), and horizontal/vertical flipping. Besides, we also blurred the object boundary to make the synthetic data visually more natural. A patch with a size of $448\times 448$ was then randomly cropped from an augmented image and used as input to train CoarseNet. To speed up the training and save memory, a smaller patch with a size of $384\times 384$ was used to train RefineNet after the training of CoarseNet.
+
+\begin{figure}[t] \centering
+    \makebox[0.16\textwidth]{\footnotesize \emph{Glass}} 
+    \makebox[0.16\textwidth]{\footnotesize \emph{Glass with Water}} 
+    \makebox[0.16\textwidth]{\footnotesize \emph{Lens}} 
+    \makebox[0.16\textwidth]{\footnotesize \emph{Complex}}
+    \makebox[0.16\textwidth]{\footnotesize \emph{Complex}}
+    \\
+    \input{ch-tomnet/figures/real_data_samples}
+    \caption[Sample images in real dataset]{Sample images in real dataset. The first row shows the background images and the second row shows the images of transparent objects.} \label{fig:real_sample}
+\end{figure}
+
+\begin{table}[t] \centering
+    \caption[Statistics of our real dataset]{Statistics of our real dataset. The first and second rows show the number of objects and the number of backgrounds used during data acquisition, respectively. The last row shows the number of captured samples. Note that the category of \emph{Glass with Water} are created by filling five of the glasses with different amount of water, and some backgrounds are shared between different shape categories.}
+    \label{tab:real_data}
+    \resizebox{0.6\textwidth}{!}{
+    \Large
+    \begin{tabular}{l|*{4}{c}}
+        \toprule
+        & \emph{Glass} & \emph{Glass with Water} & \emph{Lens} & \emph{Complex} \\% & Total 
+        \midrule                                    %
+        \# Objects     & $7$   & ($5$ glasses used)  & $1$   & $6$      \\% & 14    
+        \# Backgrounds & $60$  & $38$  & $4$   & $18$     \\% & 60    
+        \midrule                                    %
+        \# Samples     & $470$ & $103$ & $61$  & $242$    \\% & 876   
+        \bottomrule
+    \end{tabular}
+    }
+\end{table}
+\subsection{Real Dataset}
+\label{sub:Real Dataset}
+To validate the transferability of TOM-Net, we introduce a real dataset, which was captured using $14$ objects\footnote{The objects consist of $7$ glasses, $1$ lens and $6$ complex objects. Glasses with water are implicitly included.} and $60$ background images, resulting in a dataset of $876$ images. Note that the background images for real data have not been used in the synthetic training or test dataset. The data distribution is summarized in \Tref{tab:real_data}. During the data capturing process, the objects were placed under different poses, with the distances between the camera, object, and background uncontrolled. \fref{fig:real_sample} shows some sample images from the real dataset.  Note that we do not have the ground-truth matte for the real dataset. We instead captured images of the backgrounds without the transparent objects to facilitate evaluation.
+
+Following previous works, the transparent objects were captured in front of a monitor displaying different background images.
+Due to the sampling problem, there may exist Moir\'{e}-effect in the captured image.  We carefully adjusted the focal length and shutter speed to remove the Moir\'{e}-effect during the data capturing.
+
+\section{Experimental Results}
+\label{sec:experiments}
+In this section, we present experimental results and analysis.
+We performed ablation study for TOM-Net, and evaluated our approach on both synthetic and real data.  For synthetic data, we evaluated end-point error (EPE) for refractive flow fields, intersection over union (IoU) for object masks, mean square error (MSE) for attenuation masks and image reconstruction results, respectively.  For real data, due to the absence of ground-truth matte, evaluation on the absolute error with respect to the ground truth is not possible. 
+Instead, we reconstructed the input images using the estimated mattes and background images, and then evaluated the PSNR and SSIM metrics~\cite{wang2004image} between each pair of input image (\ie, photograph) and reconstructed image (\ie, composite). In addition, a user study was conducted to validate the realism of TOM-Net composites.
+
+We showcased an application of image editing of transparent object by manipulating the extracted matte, and analyzed typical failure cases. We also investigated how the performance of our method can be improved when a trimap or a background image is available.
+
+\subsection{Ablation Study for Network Architecture}
+\label{sub:Network Analysis}
+
+\begin{table} \centering
+    \caption[Ablation study for TOM-Net]{Ablation study for TOM-Net. F, A, I, and M are short for flow, attenuation, image reconstruction, and object mask, respectively. (The first value for EPE is measured on the whole image and the second measured within the object region. A-MSE and I-MSE are computed on the whole image.)}
+    \label{tab:self_compare}
+    \input{ch-tomnet/tables/ablation_study}
+\end{table}
+
+We quantitatively analyzed different components of TOM-Net using synthetic dataset\footnote{Complex shape is excluded in experiments here to speed up training.}. We first verified the effectiveness of \emph{refractive flow regression loss} ($\mathL^{c}_{fr}$), \emph{cross-link}, \emph{multi-scale loss} and \emph{image reconstruction loss} ($\mathL^{c}_{ir}$) in the coarse stage by removing each of them from \emph{CoarseNet} during training. We then validated the effectiveness of \emph{RefineNet} in recovering details of the refractive flow field.  RefineNet was evaluated by adding it to a trained CoarseNet and was trained while fixing the parameters of CoarseNet. 
+For comparison, we also included a naive baseline, denoted as \emph{Background}, by considering a zero matte case (\ie, whole image as object mask, no attenuation, and no refractive flow) where the reconstructed image is the same as the background image. The quantitative results are summarized in \Tref{tab:self_compare} and the qualitative comparisons are shown in \fref{fig:syn_ablation_study}.
+Overall, the baseline \emph{Background} was outperformed by all TOM-Net variants with a large margin for all the evaluation metrics, which clearly shows that TOM-Net can successfully learn the matte. 
+
+\paragraph{Effectiveness of refractive flow regression loss} Comparing experiments with IDs 1 \& 5 in \Tref{tab:self_compare}, it can be clearly seen that the CoarseNet trained with the refractive flow regression loss significantly outperformed that without it in refractive flow estimation. This result indicates that image reconstruction loss alone is not enough to supervise the learning of refractive flow. \fref{fig:syn_ablation_study} (a \& e) qualitatively show that the refractive flow regression loss improved the performance of refractive flow estimation.
+
+\begin{figure}[tbp] \centering
+    \input{ch-tomnet/figures/syn_ablation_study_larger}
+    \caption[Qualitative comparison of different model variants]{Qualitative comparison of different model variants. The first row shows a sample of \emph{Glass with Water} from the synthetic test dataset. The second and third rows show the estimated refractive flow fields and attenuation masks by different variants, respectively. (\textbf{CNet} and \textbf{RNet} are short for CoarseNet and RefineNet.)} \label{fig:syn_ablation_study}
+\end{figure}
+
+\paragraph{Effectiveness of cross-link} Comparing experiments with IDs 2 \& 5 in \Tref{tab:self_compare}, we can see that augmenting the decoders of CoarseNet with cross-link helped improve the performance in all metrics, suggested that utilizing correlation is helpful for the matte estimation.
+\fref{fig:syn_ablation_study} (b \& e) qualitatively show the results without and with cross-link during training.
+
+\paragraph{Effectiveness of multi-scale loss} Comparing experiments with IDs 3 \& 5 in \Tref{tab:self_compare}, we can see that multi-scale loss boosted performance of CoarsNet in all of the evaluation metrics, particularly the attenuation mask MSE (see \fref{fig:syn_ablation_study} (c \& e) for qualitative comparison).
+
+\paragraph{Effectiveness of image reconstruction loss} Comparing experiments with IDs 4 \& 5 in \Tref{tab:self_compare}, we can see that adding image reconstruction loss in the coarse stage slightly improved the performance of refractive flow estimation and was very effective for reducing the image reconstruction error (see \fref{fig:syn_ablation_study} (d \& e) for qualitative comparison).
+
+\begin{figure}[tbp] \centering
+    \input{ch-tomnet/figures/refine_vis}
+    \caption[Visualization of the effectiveness of the refinement stage on real data]{Visualization of the effectiveness of the refinement stage on real data. After refinement, the refractive flow and attenuation mask have more clear structural details (\eg, glass mouth).} \label{fig:refine}
+\end{figure}
+
+\paragraph{Effectiveness of RefineNet}
+Comparing experiments with IDs 5 \& 6 in \Tref{tab:self_compare}, we can clearly see that RefineNet can significantly improve the refractive flow estimation. \fref{fig:syn_ablation_study} (e \& f) and \fref{fig:refine} show that RefineNet can infer sharp details on both the synthetic and real data based on the outputs of CoarseNet, demonstrating the effectiveness of the RefineNet. We also found that image reconstruction loss is not helpful for refractive flow estimation in the refinement stage (experiments with IDs 6 \& 7 in \Tref{tab:self_compare}). This is reasonable since the matte produced by CoarseNet already gives a small image reconstruction error, and further reducing the image reconstruction error does not guarantee a better refractive flow field. 
+
+\subsection{Evaluation on Synthetic Data}
+\label{sub:Results on Synthetic data}
+\begin{table*}[htbp] \centering
+    \caption[Quantitative results on the synthetic test dataset]{Quantitative results on the synthetic test dataset. (The first value for EPE is measured on the whole image and the second measured within the object region. A-MSE and I-MSE are computed on the whole image.)}
+    \input{ch-tomnet/tables/syn_quant_larger}
+    \label{tab:quant_synth}
+\end{table*}
+
+Quantitative results for synthetic test dataset are presented in \Tref{tab:quant_synth}. We compared TOM-Net against \emph{Background} and CoarseNet. Here, to accelerate training convergence, we first trained CoarseNet from scratch using our synthetic dataset excluding the complex shape subset. The trained CoarseNet was then fine-tuned using the entire training set including complex shapes, followed by training of RefineNet on the entire training set with random initialization. Similar to previous experiments, TOM-Net outperformed \emph{Background} by a large margin, and slightly outperformed CoarseNet in both EPE and MSE, which implies more local details can be learned by RefinedNet. 
+
+The average IoU for object mask estimation is $0.96$, indicates that TOM-Net can robustly segment the transparent object given only a single image as input.
+Although TOM-Net is not expected to learn highly accurate refractive flow, the average EPE errors ($2.7/18.6$)\footnote{The first value is measured on the whole image and the second measured within the object region.} are very small compared with the size of the input image ($448\times 448$). In this sense, our predicted flow is capable of producing visually plausible refractive effect. The errors of complex shape category are larger than that of others, because complex shapes contain more sharp regions that will induce more errors. 
+\Fref{fig:qual_synth} and \Fref{fig:qual_synth2} show the qualitative results on five synthetic objects. The objects in the first four examples come from the test set where each example shows a specific object category. Although the background images and objects in the test set never appear in the training set, TOM-Net can still predict robust matte.
+ The last row (\ie, \fref{fig:qual_synth2}~(e)) shows a sample of \emph{complex dog}, which was rendered using a 3D dog model. The pleasing result on the \emph{complex dog} demonstrates that our model can generalize well from simple shapes to complex shapes.
+
+\Fref{fig:qual_synth} shows that the reconstructed images using the estimated mattes (column 2) are very close to the input images (column 2), which empirically verifies that our simplified matting equation \eref{eq:em_simplify3} is sufficiently accurate for this problem.
+
+\begin{figure}[htbp] \centering
+    \input{ch-tomnet/figures/syn_qual_larger}
+    \caption[Qualitative results on synthetic data (part $1$)]{Qualitative results on synthetic data (part $1$). For each example, the first column shows the input image and background. The second column shows the reconstructed image and reconstruction error map. The last three columns show the ground truth matte and estimation. Quantitative results are shown below each example. Dark region in GT flow indicates no valid flow.} \label{fig:qual_synth}
+\end{figure}
+
+\begin{figure}[htbp] \centering
+    \input{ch-tomnet/figures/syn_qual_larger2}
+    \caption[Qualitative results on synthetic data (part $2$)]{Qualitative results on synthetic data (part $2$). For each example, the first column shows the input image and background. The second column shows the reconstructed image and reconstruction error map. The last three columns show the ground truth matte and estimation. Quantitative results are shown below each example. Dark region in GT flow indicates no valid flow.} \label{fig:qual_synth2}
+\end{figure}
+
+\clearpage
+\subsection{Evaluation on Real Data}
+\label{sub:Results}
+\begin{table}[htbp] \centering
+    \caption[Quantitative results on real data]{Quantitative results on real data. (Value the higher the better.)}
+    \resizebox{0.9\textwidth}{!}{ 
+    \huge
+    \begin{tabular}{c|*{2}{c}|*{2}{c}|*{2}{c}|*{2}{c}|*{2}{c}}
+        \toprule
+        \multirow{2}{*}{} & \multicolumn{2}{c}{\emph{Glass}} 
+                          & \multicolumn{2}{c}{\emph{Glass with Water}} 
+                          & \multicolumn{2}{c}{\emph{Lens}} 
+                          & \multicolumn{2}{c}{\emph{Complex}} 
+                          & \multicolumn{2}{c}{Avg} \\
+        & PSNR & SSIM  & PSNR & SSIM & PSNR & SSIM & PSNR & SSIM & PSNR & SSIM \\
+        \midrule
+        Background    & 22.05 & 0.894 & 20.75 & 0.886 & 18.60 & 0.860 & 16.85 & 0.816 & 19.56 & 0.864 \\ 
+        CoarseNet     & 25.09 & 0.921 & 23.53 & 0.911 & 21.13 & 0.895 & 17.89 & 0.835 & 21.91 & 0.891  \\ 
+        TOM-Net        & 25.06 & 0.920 & 23.53 & 0.911 & 20.89 & 0.893 & 17.88 & 0.835 & 21.84 & 0.890 \\ 
+        \bottomrule
+    \end{tabular}
+    }
+    \label{tab:real_quant}
+\end{table}
+
+We evaluated TOM-Net on our captured real dataset, which consists of $876$ images of real objects. The results are shown in \Tref{tab:real_quant}. The average PSNR and SSIM are above $21.0$ and $0.89$ respectively. The values are a bit lower for complex shapes, due to the opaque base of complex objects as well as the sharp regions of the objects that might induce large errors. After training, TOM-Net generalized well to common real transparent objects (see \fref{fig:real_qualitative}). It is worth to note that during training, each sample contains only one object, while TOM-Net can predict reliable matte for images containing multiple objects (see \fref{fig:real_qualitative} (c)), which indicates the transferability and robustness of TOM-Net.
+
+\begin{figure}[htbp] \centering
+    \input{ch-tomnet/figures/real_qual}
+    \caption[Qualitative results on real data]{Qualitative results on real data. The PSNR and SSIM between input photographs and reconstructed images are shown below each example. The last column shows the composites on novel backgrounds given the estimated matte.} 
+    \label{fig:real_qualitative}
+\end{figure}
+
+\paragraph{User study}
+\label{par:User Study}
+Remember that our goal is to estimate an environment matte that can produce visually realistic refractive effect from the input image, instead of estimating the highly accurate refractive flow.
+A user study was carried out to validate the realism of TOM-Net composites. $69$ subjects participated in our user study. At the beginning, we showed each participant photographs of the transparent objects that will be seen during the user study. The objects consisted of $3$ different glasses, $1$ glass with water, $1$ lens, and $1$ complex shape. $40$ samples, including $20$ photographs\footnote{glass $\times$12, glass \& water $\times$4, lens $\times$2, and complex shape $\times$2.} and the corresponding $20$ TOM-Net composites, were then randomly presented to each subject. When showing each sample, we also showed the corresponding background image to the subject for reference. We provided $3$ options for each sample: (P) {\em photograph}, (C) {\em composite}, (N) {\em not distinguishable}.
+\Tref{tab:user_study} shows the statistics of the user study. The $69$ participants produced $1,380$ votes for the $20$ real photographs, and $1,380$ votes for the $20$ composites, respectively. The P:C:N ratios are $850:455:75$ and $827:482:71$ for photographs and composites respectively. The per-category ratios also follow a similar trend, indicating close chance of photographs and composites to be considered real, which further demonstrates TOM-Net can produce realistic matte. 
+
+\begin{table}[tbp] \centering
+    \caption[User study results]{User study results. P, C, and N are short for votes for photograph, composite, and not distinguishable.}
+    \large
+    \resizebox{0.8\textwidth}{!}{
+        \begin{tabular}{c|*{3}{c}|*{3}{c}|*{3}{c}|*{3}{c}|*{3}{c}}
+        \toprule
+            \multirow{2}{*}{}  & \multicolumn{3}{c}{\emph{Glass}} 
+                               & \multicolumn{3}{c}{\emph{Glass with Water}} 
+                               & \multicolumn{3}{c}{\emph{Lens}} 
+                               & \multicolumn{3}{c}{\emph{Complex}}  
+                               & \multicolumn{3}{c}{All}  \\
+                               & P & C & N & P & C & N & P & C & N & P & C & N & P & C & N \\ \midrule
+        Photographs        & 522 & 275 & 31 & 163 & 97 & 16 & 74 & 48 & 16 & 91 & 35 & 12 & 850 & 455 & 75 \\
+        Composites    & 531 & 266 & 31 & 145 & 113 & 18 & 73 & 52 & 13 & 78 & 51 & 9 & 827 & 482 & 71 \\
+        \bottomrule
+    \end{tabular}
+    }
+    \label{tab:user_study}
+\end{table}
+
+\begin{figure}[htbp] \centering
+    \includegraphics[width=0.8\textwidth]{ch-tomnet/images/user_study/user_study_larger} \\
+    \makebox[0.4\textwidth]{\footnotesize Photograph} 
+    \makebox[0.4\textwidth]{\footnotesize Composite} 
+    \caption[Comparison of the photograph and composite]{Comparison of the photograph and composite. The first row shows the predicted matte, which is estimated by taking the photograph as input to our method. The second row compares the photograph and composite. When looking at the photograph and composite simultaneously, users can easily spot some imperfections of the composites (mostly in the boundary region).}
+    \label{fig:sup_user_study}
+\end{figure}
+
+Although we stress that TOM-Net can produce visually realistic composites, the results are still less than perfect. When looking at the real image and our composite side-by-side, users can spot some imperfections of the composite (mostly in the boundary region, see \fref{fig:sup_user_study}). Therefore, we did not include such a user study by showing the real image and our composite side-by-side. Otherwise, the result will be biased. In the future, we will strengthen our approach to produce more realistic composites, so that the real image and our composite are indistinguishable even when showing them side-by-side.
+
+\subsection{Transparent Object Editing by Manipulating Environment Matte}
+\label{sec:edit_flow}
+
+\begin{figure}[htbp] \centering
+    \makebox[0.132\textwidth]{\scriptsize Background} 
+    \makebox[0.132\textwidth]{\scriptsize Input} 
+    \makebox[0.132\textwidth]{\scriptsize Rec. Image} 
+    \makebox[0.132\textwidth]{\scriptsize Rec. Error} 
+    \makebox[0.132\textwidth]{\scriptsize Refractive Flow} 
+    \makebox[0.132\textwidth]{\scriptsize Object Mask} 
+    \makebox[0.132\textwidth]{\scriptsize Attenuation Mask} 
+    \\
+    \input{ch-tomnet/figures/sup_editFlow_example}
+    \makebox[\textwidth]{\footnotesize (a) An example result on \emph{Glass with Water}. Reconstruction error: PSNR=25.69, SSIM=0.95}
+    \\
+    \input{ch-tomnet/figures/sup_scaleFlow}
+    \vspace{-0.2em}\makebox[\textwidth]{\footnotesize (b) Rescaling the magnitude of the estimated refractive flow field.}
+    \\
+    \vspace{0.4em}
+    \input{ch-tomnet/figures/sup_editFlow} 
+    \makebox[\textwidth]{\footnotesize (c) Translate, rotate or rescale the environment matte.}
+    \caption[Image editing by manipulating the predicted environment matte]{Various novel composites of a \emph{Glass with Water} shape obtained by manipulating the predicted environment matte.} \label{fig:sup_edit}
+\end{figure}
+
+Given a single image as input, our TOM-Net can estimate the environment matte as a triplet (consisting of an object mask, an attenuation mask, and a refractive flow field) in a fast feed-forward pass (see \fref{fig:sup_edit} (a) for an example).
+Note that the goal of the proposed TOM-Net is to extract an environment matte that can produce realistic refractive effect from a single image, instead of estimating a highly accurate environment matte. 
+The reconstructed image in \fref{fig:sup_edit} (a) looks realistic but does not have the same refractive effect as the original input, as the refractive effect of the estimated matte seems stronger. 
+By decreasing the magnitude of the estimated refractive flow field\footnote{We simply multiply the refractive flow field by a scaling factor ($<1$).}, we can produce a similar refractive effect as the input image (see \fref{fig:sup_edit} (b)). When the scaling factor becomes $0.6$, the reconstructed image achieved the lowest reconstruction error, with an improvement of $1.49$ and $0.01$ in PSNR and SSIM, respectively.
+Apart from rescaling the magnitude of the refractive flow field to adjust the refractive effect of the object, more interesting composites can be obtained by translating, rotating and rescaling the environment matte (see \fref{fig:sup_edit} (c)). 
+
+\subsection{Failure Cases}
+\label{sec:Failure Cases}
+
+\begin{figure}[htbp] \centering
+    \makebox[0.05\textwidth]{\footnotesize } 
+    \makebox[0.18\textwidth]{\footnotesize Input} 
+    \makebox[0.18\textwidth]{\footnotesize Refractive Flow} 
+    \makebox[0.18\textwidth]{\footnotesize Object Mask} 
+    \makebox[0.18\textwidth]{\footnotesize Attenuation Mask} \\
+    \input{ch-tomnet/figures/sup_failure}
+    \caption[Failure cases on real data]{Two failure cases on real data. In (a), our model fails to estimate the upper-part of the matte as there is no visual clue to find the object. In (b), the bottom part of the estimated matte is incomplete as the background image is heavily cluttered and the bottom part of the object is very dark.}
+    \label{fig:sup_fail}
+\end{figure}
+
+Our model can robustly estimate environment matte for different transparent objects in front of different backgrounds, however, when there is no visual clue for the objects or the image is too cluttered to separate the object from the background, our model may fail. \Fref{fig:sup_fail} shows two failure cases of our model on real data. In \fref{fig:sup_fail} (a), our model fails to extract the upper-part of the environment matte for the transparent glass due to the lack of visual clue. 
+In \fref{fig:sup_fail} (b), although our model is still able to estimate a reasonable matte, the bottom part of the estimated matte is incomplete due to the very cluttered background. 
+
+
+\subsection{Improvement with Trimap and Background Image}
+\begin{table*}[htbp] \centering
+    \caption[Quantitative comparison on the synthetic test dataset]{Quantitative comparison between TOM-Net, \TOMNetTrimap and \TOMNetBg on the synthetic test dataset.}
+    \input{ch-tomnet/tables/syn_quant_trimap_bg_larger}
+    \label{tab:stereo_quant_synth}
+\end{table*}
+
+\begin{table}[htbp] \centering
+    \caption[Quantitative comparison on real data]{Quantitative comparison between TOM-Net, \TOMNetTrimap and \TOMNetBg on real data.}
+    \resizebox{0.8\textwidth}{!}{ 
+    \huge
+    \begin{tabular}{l|*{2}{c}|*{2}{c}|*{2}{c}|*{2}{c}|*{2}{c}}
+        \toprule
+        \multirow{2}{*}{} & \multicolumn{2}{c}{\emph{Glass}} 
+                          & \multicolumn{2}{c}{\emph{Glass with Water}} 
+                          & \multicolumn{2}{c}{\emph{Lens}} 
+                          & \multicolumn{2}{c}{\emph{Complex}} 
+                          & \multicolumn{2}{c}{Average} \\
+        & PSNR & SSIM  & PSNR & SSIM & PSNR & SSIM & PSNR & SSIM & PSNR & SSIM \\
+        \midrule
+        Background     & 22.05 & 0.894 & 20.75 & 0.886 & 18.60 & 0.860 & 16.85 & 0.816 & 19.56 & 0.864 \\ 
+        TOM-Net        & 25.06 & 0.920 & 23.53 & 0.911 & 20.89 & 0.893 & 17.88 & 0.835 & 21.84 & 0.890 \\ 
+        \TOMNetTrimap & 25.48 & 0.924 & 23.77 & 0.914 & 23.98 & 0.913 & 20.88 & 0.868 & 23.53 & 0.905\\ 
+\TOMNetBg     & 26.10 & 0.931 & 24.58 & 0.922 & 25.52 & 0.924 & 22.23 & 0.884 &\textbf{24.61} & \textbf{0.915} \\ 
+        \bottomrule
+    \end{tabular}
+    }
+    \label{tab:real_quant_stereo}
+\end{table}
+
+\begin{figure*} \centering
+    \input{ch-tomnet/figures/qual_mono_trimap_stereo_larger}
+    \caption[Qualitative comparison on real data]{Qualitative comparison between TOM-Net, \TOMNetTrimap and \TOMNetBg on real data.
+    For each testing object, the input to the model is shown on the first column, and the results of TOM-Net (up), \TOMNetTrimap (middle) and \TOMNetBg (bottom) are shown on the rest of the columns. Note that for \TOMNetTrimap and \TOMNetBg, we do not show the input image for simplicity. The PSNR and SSIM between input photographs and reconstructed images are shown right after the error maps.}
+    \label{fig:qual_stereo_mono}
+\end{figure*}
+
+At test time, the input trimaps for \TOMNetTrimap were generated in the same way adopted in the training (as described in \Sref{ssec:trimap}), except that the foreground regions were obtained by performing erosion operation on the ground-truth object mask with a fixed (rather than a random) kernel size of $10$ pixels for evaluation.
+\Tref{tab:stereo_quant_synth} shows the quantitative comparisons between TOM-Net, \TOMNetTrimap and \TOMNetBg on the synthetic test dataset. 
+As expected, with the access to the additional information, both \TOMNetTrimap and \TOMNetBg performed better than TOM-Net. Due to the fact that a background image contains more useful information than a trimap, \TOMNetBg achieved the best results.
+
+\Tref{tab:real_quant_stereo} presents the quantitative comparison on real data. Compared with TOM-Net, \TOMNetTrimap and \TOMNetBg achieved an improvement of $1.69$ and $2.77$ in average PSNR and an improvement of $0.015$ and $0.024$ in average SSIM, respectively. 
+\fref{fig:qual_stereo_mono} shows the qualitative comparison on real data, where the foreground region of the trimap was marked by the user. It can be seen that with the additional information, \TOMNetTrimap and \TOMNetBg can identify the transparent object from the cluttered background more accurately than TOM-Net and model the opaque base of the transparent object (\fref{fig:qual_stereo_mono} (a)). As a result, the environment matte predicted by \TOMNetTrimap and \TOMNetBg can produce more realistic composites and achieve lower reconstruction errors, clearly demonstrating the effectiveness of our framework in handling cases where a trimap or a background image is available.
+
+\section{Discussion}
+\label{sec:discussion}
+
+\begin{figure*}[t] \centering
+    \input{ch-tomnet/figures/limitation}
+    \caption[Results on colored object and objects under natural illumination]{Qualitative results of TOM-Net on colored transparent object (first row) and objects under natural illuminations (last four rows).}
+    \label{fig:limitation}
+\end{figure*}
+
+\subsection{Limitations}
+Although our method can produce plausible results for transparent object matting, there do exist limitations that require further study.
+First, our model assumes objects to be colorless so that the attenuation property of an object can be depicted as a scalar value $\rho$ in our formulation. However, this is not applicable to colored transparent objects, as shown in see \fref{fig:limitation}~(a). 
+Although our method can estimate a reasonably good object mask and refractive flow field for the \emph{Glass with Water}, the estimated attenuation mask cannot model the colored effect of the object.
+
+Second, our model assumes a single planar background (following most of the previous works) as the only light source and simplifies the interaction between object and background image to a point-to-point (single) mapping. However, more complicated effects exist in the real world, such as specular highlights, translucency, multi-mapping (\ie, refraction and reflection happen simultaneously at a surface point), and color dispersion (\ie, different color components may have different supporting background regions). 
+\fref{fig:limitation}~(b)-(e) show four example results of TOM-Net on transparent objects under different types of natural illuminations. Regardless of the fact that TOM-Net can estimate a plausible object mask and refractive flow field, the composites do not look very realistic. 
+This is because our current formulation does not consider the more sophisticated refractive properties of a transparent object under natural illumination like complex interaction with environment light, specular highlight, Fresnel effect, and acoustic shadow.
+
+\subsection{Colored Objects and Specular Highlights}
+Here we sketch the potential solutions to colored transparent objects as well as the cases when specular highlights appear on transparent objects. In \Sref{sec:formulation}, we simplified matting equation as \eref{eq:em_simplify3}.
+To handle colored objects, the scalar attenuation index $\rho$ should be expanded to a color attenuation 3-vector $R$, in which each value corresponds to an attenuation index for a specific color channel. The matting equation then becomes 
+\begin{equation}
+    \label{eq:color_2}
+    C = (1 - m) B + mR \circ \mathcal{M}(\mathbf{T}, P),
+\end{equation}
+where $\circ$ represents element-wise multiplication.
+
+Consider a white near point light source, we can simplify the specular highlight effect with a specular highlight component $S$, then the generalized matting equation can be written as
+\begin{equation}
+    \label{eq:color_2}
+    C = (1 - m) B + mR \circ \mathcal{M}(\mathbf{T}, P) + S,
+\end{equation}
+where $S$ is a 3-vector containing three identical values.
+The problem of transparent object matting now becomes simultaneously estimating an object mask, a color attenuation mask, a refractive flow field, and a specular highlight mask from a single image, while more efforts are needed to implement them for practical use and we leave this as our future work.
+
+\subsection{Difficulty in Comparison with Previous Works}
+Currently, it is not trivial to have a fair comparison with existing methods. On one hand, applying our method on the data used in the previous methods is difficult. Most of the previous methods require multiple images of the transparent object captured in front of pre-designed patterns, which are not publicly available and lack enough textures for our method to estimate the refractive effect of the transparent object. 
+The single image based methods RTCEM~\cite{chuang2000environment} and~\cite{yeung2011matting} have additional requirements. In particular, RTCEM~\cite{chuang2000environment} requires the object to be captured in front of a coded-pattern (also not publicly available), and the background image is needed to segment the foreground object. 
+\cite{yeung2011matting} requires human interaction to segment the foreground object and model the object's refractive effect with thin-plate-spline transformation. The data used in~\cite{yeung2011matting} does not follow our assumption that the light comes from a single background image, thus it cannot be directly processed by our method.
+On the other hand, there are no public implementations for the previous methods, and even if there were, those methods cannot be applied to our dataset which is created for single image transparent object matting.
+
+Different from the previous methods, our method aims to estimate the foreground mask, attenuation mask, and refractive flow field from a single natural image. Since our code and datasets have been made publicly available, it will ease the comparison for the future work. We believe our work can serve as a baseline and provide meaningful insight for future researches in this area.
+
+\subsection{Generalization to Real Data}
+    As it is very difficult and time consuming to create a large scale real dataset for training, we use synthetic data for training and evaluate its performance on real data. 
+It is well-known that there is a domain gap between the synthetic and real data, and a model trained on synthetic data may not generalize well to real data.
+We hypothesize that the reasons why our method works well on real data are as follows.
+Following previous works, the real transparent objects are captured in front of a monitor.
+Under our assumption, the captured images and the rendered images are very similar. Moreover, extensive data augmentation is performed to close the gap between the synthetic and real data.
+
+To further improve the generalization ability of our method on real data, we will explore the idea of exploiting real data for self-supervised training or fine-tuning in the future.
+
+\subsection{Design of the Network Architecture}
+To better recover the details of the refractive flow field and attenuation mask, we propose a two-stage network architecture for this problem. 
+Our results show that RefineNet can effectively improve the results of CoarseNet.
+However, our two-stage network requires stepwise training (\ie, we first trained CoarseNet until convergence and then trained RefineNet) which requires longer training time.
+An interesting future direction is to develop a more efficient single-stage network that achieves comparable performance as the two-stage network. 
+
+\section{Conclusion}
+\label{sec:conclusion}
+We have introduced a simple and efficient model for transparent object matting, and proposed a CNN architecture, called TOM-Net, that takes a single image as input and predicts environment matte as an object mask, an attenuation mask, and a refractive flow field in a fast feed-forward pass. We created a large-scale synthetic dataset and a real dataset as a benchmark for learning transparent object matting. We have also shown that TOM-Net can perform better by incorporating a trimap or a background image in the input. Promising results have been achieved on both synthetic and real data, which clearly demonstrate the feasibility and effectiveness of the proposed approach. 

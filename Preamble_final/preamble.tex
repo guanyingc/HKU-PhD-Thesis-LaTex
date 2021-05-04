@@ -1,0 +1,134 @@
+
+\ifsetMargin
+\else
+    \RequirePackage[left=37mm,right=30mm,top=35mm,bottom=30mm]{geometry}
+    \setFancyHdr %
+\fi
+
+
+\ifsetFont
+\else
+    \RequirePackage{libertine} 
+\fi
+
+
+
+
+
+\ifsetBib %
+\else %
+    \RequirePackage[square, sort, numbers, authoryear]{natbib} %
+\fi
+
+\renewcommand{\bibname}{References}
+
+
+
+
+
+\usepackage{setspace}
+\linespread{1.5}
+
+
+
+
+
+
+\RequirePackage[labelsep=space,tableposition=top]{caption} 
+\renewcommand{\figurename}{Fig.} %
+
+
+
+
+
+
+
+
+\usepackage{subcaption}
+\usepackage{graphicx}
+
+
+
+
+\usepackage{tabularx}
+\usepackage{multirow}
+\usepackage{booktabs}
+\usepackage{makecell} %
+\usepackage{colortbl}
+\captionsetup[table]{font={stretch=1.1}}
+\captionsetup[figure]{font={stretch=1.1}}
+
+\usepackage{amsfonts}
+\usepackage{amsmath}
+\usepackage{amssymb}
+
+\setcounter{secnumdepth}{2}
+\setcounter{tocdepth}{2}
+
+\usepackage{siunitx} %
+\usepackage{xcolor}
+\usepackage{float}
+\renewcommand{\labelitemi}{$\bullet$}
+\usepackage{gensymb} %
+\usepackage{xspace}
+\usepackage{rotating}
+\usepackage{tikz}
+\usepackage{tikz-3dplot}
+
+\newcommand{\B}[1]{\textbf{#1}}
+
+\newcommand{\Cref}[1]{Chapter~\ref{#1}}
+\newcommand{\Tref}[1]{Table~\ref{#1}}
+\newcommand{\eref}[1]{Eq.~\eqref{#1}}
+\newcommand{\Eref}[1]{Equation~\eqref{#1}}
+\newcommand{\fref}[1]{Fig.~\ref{#1}}
+\newcommand{\Fref}[1]{Figure~\ref{#1}}
+\newcommand{\Frefs}[1]{Figures~\ref{#1}}
+\newcommand{\sref}[1]{Sec.~\ref{#1}}
+\newcommand{\Sref}[1]{Section~\ref{#1}}
+
+\newcommand{\argmax}{\mathop{\mathrm{argmax}}\limits}
+\newcommand{\argmin}{\mathop{\mathrm{argmin}}\limits}
+\newcommand{\rank}[1]{\mathsf{rank}\left(#1\right)}		%
+\newcommand{\norm}[1]{\left\|#1\right\|}				%
+\newcommand{\abs}[1]{\left\lvert#1\right\rvert}
+\newcommand{\Span}[1]{\mathsf{span}\left\{#1\right\}}	%
+\renewcommand{\dim}[1]{\mathsf{dim}\left(#1\right)}		%
+\newcommand{\ran}[1]{\mathsf{ran}\left(#1\right)}		%
+\newcommand{\Null}[1]{\mathsf{null}\left(#1\right)}		%
+\newcommand{\V}[1]{\ensuremath{\mathbf{#1}}}
+
+\def\eg{\emph{e.g}\onedot} \def\Eg{\emph{E.g}\onedot}
+\def\ie{\emph{i.e}\onedot} \def\Ie{\emph{I.e}\onedot}
+\def\cf{\emph{c.f}\onedot} \def\Cf{\emph{C.f}\onedot}
+\def\etc{\emph{etc}\onedot} \def\vs{\emph{vs}\onedot}
+\def\wrt{w.r.t\onedot} \def\dof{d.o.f\onedot}
+\def\etal{\emph{et al}\onedot}
+
+\newcommand{\vn}{\boldsymbol{n}}
+\newcommand{\vv}{\boldsymbol{v}}
+\newcommand{\vl}{\boldsymbol{l}}
+\newcommand{\vM}{\mathbf{M}}
+\newcommand{\vN}{\mathbf{N}}
+\newcommand{\vL}{\mathbf{L}}
+\newcommand{\vh}{\boldsymbol{h}}
+
+
+\newcommand{\emphobject}[1]{\textsc{#1}\xspace} 
+\newcommand{\PSFCNplusN}{PS-FCN$^{+\text{N}}$\xspace}
+\newcommand{\diligent}{DiLiGenT benchmark\xspace}
+\newcommand{\Diligent}{DiLiGenT Benchmark\xspace}
+\newcommand{\lightstage}{Light Stage Data Gallery\xspace}
+\newcommand{\gourd}{Gourd\&Apple dataset\xspace}
+\newcommand{\dragonSVBRDF}{\emphobject{Dragon$^\text{SVBRDF}$}}
+\newcommand{\syntestMERL}{SynTest$^\text{MERL}$\xspace}
+
+
+
+
+
+
+
+
+
+

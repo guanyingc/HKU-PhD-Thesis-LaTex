@@ -1,0 +1,18 @@
+\resizebox{0.7\textwidth}{!}{
+\Huge
+\begin{tabular}{cl|c|*{1}{c}*{1}{c}*{1}{c}*{1}{c}}
+\toprule
+ID & Model  & \# Param & {\sc Sphere} & {\sc Bunny} & {\sc Dragon} & {\sc Armad.}\\
+\midrule
+C0 & PS-FCN                      & 2.2 M & 2.66   & 3.80 & 4.83 & 5.24\\ %
+\midrule 
+C1 & LCNet + PS-FCN                      & 6.6 M & 3.19  & 4.67 & 6.92 & 7.70\\ %
+\rowcolor{gray!30}
+C2 & LCNet + PS-FCN$^\dag$& 6.6 M        & \B{2.71} & \B{4.09} & \B{6.41} & \B{7.09}\\%vis7 Mid
+C3 & LCNet$_{\text{reg}}$ + PS-FCN$^\dag$ & 6.6 M & 3.22  & 4.99 & 6.63 & 7.54\\ %
+\midrule
+C4 & UPS-FCN$_{\text{deep+mask}}$   & 6.1 M & 3.65 & 6.41 & 9.68 & 11.26   \\ %
+C5 & UPS-FCN     & 2.2 M & 7.44 & 12.34 & 14.44 & 15.93 \\ %
+\bottomrule
+\end{tabular}
+}

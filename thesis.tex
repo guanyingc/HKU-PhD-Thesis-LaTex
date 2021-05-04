@@ -1,0 +1,81 @@
+\let\mypdfximage\pdfximage
+\def\pdfximage{\immediate\mypdfximage}
+\documentclass[a4paper,12pt,default,numbered,print]{Classes_final/PhDThesisPSnPDF}
+
+\input{Preamble_final/preamble}
+\input{Preamble_final/color_table_header}
+
+\makeatletter
+\DeclareRobustCommand\onedot{\futurelet\@let@token\@onedot}
+\def\@onedot{\ifx\@let@token.\else.\null\fi\xspace}
+
+\makeatother
+
+\title{Single View Analysis of Non-Lambertian Objects Based on Deep Learning}
+\author{Guanying Chen}
+\dept{Department of Computer Science}
+\university{The University of Hong Kong}
+\crest{\includegraphics[width=0.25\textwidth]{Classes_final/HKUcolour}}
+
+\newcommand{\chinesename}{\includegraphics[width=0.13\textwidth]{Classes_final/ChineseName_gy.pdf}}
+
+\renewcommand{\submissiontext}{This dissertation is submitted for}
+\degreename{Doctor of Philosophy}
+\degreedate{December, 2020} 
+\subject{Computer Vision} 
+\keywords{{Computer Vision} {Image Matting} {Photometric Stereo} {Lighting Estimation} {Non-Lambertian}} 
+
+
+\ifdefineAbstract
+ \includeonly{Abstract/abstract} 
+\else
+\fi
+
+\begin{document}
+\frontmatter
+
+\begin{titlepage}
+\maketitle
+\end{titlepage}
+
+\newcommand{\gy}[1]{\textcolor{red}{[gy: #1]}}
+\newcommand{\kywong}[1]{\textcolor{blue}{[kywong: #1]}}
+\newcommand{\tred}[1]{\textcolor{red}{#1}}
+\newcommand{\rev}[1]{\textcolor{red}{#1}}
+\newcommand{\old}[1]{\textcolor{blue}{#1}}
+
+\include{Dedication/dedication}
+\include{Declaration/declaration}
+\include{Acknowledgement/acknowledgement}
+\include{Abstract/abstract}
+
+\tableofcontents
+\listoffigures
+\listoftables 
+
+\mainmatter
+
+
+\include{ch-introduction/introduction}
+\include{ch-tomnet/tomnet}
+\include{ch-psfcn/psfcn}
+\include{ch-lcnet/lcnet}
+\include{ch-conclusion/conclusion}
+
+
+
+\backmatter 
+
+\begin{spacing}{1}
+
+
+\bibliographystyle{IEEEtran}
+
+\cleardoublepage
+\bibliography{gychen} %
+
+\end{spacing}
+
+\printthesisindex %
+
+\end{document}

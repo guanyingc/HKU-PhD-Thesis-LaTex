@@ -1,0 +1,27 @@
+    \resizebox{\textwidth}{!}{
+    \Large
+    \begin{tabular}{lllllcc}
+        \toprule
+        \textbf{Methods} & \makecell{\textbf{Asymptotic} \\ \textbf{\# images}}  & \makecell{\textbf{\# images} \\($k=1024)$} & \makecell{\textbf{Typical runtime}\\($k=1024$)} & \textbf{Mapping type} & \textbf{Materials} & \textbf{Remarks} \\
+        \midrule
+        Ours                                         & $O(1)$  & $1$              & \makecell{$0.5$ secs when $k=512$ \\ (run on a GPU)} & single-pixel & colorless, specularly refractive & \makecell{aims for visually realistic effect} \\
+        \midrule                                                                    
+RTCEM \cite{chuang2000environment}                    & $O(1)$  & $1$              & $2$ mins & single-pixel & colorless, specularly refractive & \makecell{requires a coded background \\ and off-line processing}\\
+        \midrule                                                                    
+Yeung et. al \cite{yeung2011matting}                 & $O(1)$  & $1$              & $30$ secs & single-pixel & colored refractive  & \makecell{requires human interaction, \\ aims for visually realistic effect}\\
+        \midrule                                                                    
+Zongker \textit{et al}. \cite{zongker1999environment}& $O(\log k)$ & $20$         & $20$ mins when $k=512$& single-region & \makecell{colored refractive, translucent, \\ highly specular} & assumes rectangular support region \\
+        \midrule                                                                    
+Chuang \textit{et al}. \cite{chuang2000environment}  & $O(k)$ & $1800$             & not available & multi-region & \makecell{Zongker \textit{et al}. \cite{zongker1999environment} + (color dispersion, \\ multiple mapping, glossy reflection)} & \makecell{requires solving a complex \\ optimization problem}\\
+        \midrule                                                                    
+Wavelet \cite{wang2004image}                         & $O(k)$ & $ 2400$            & $12$ hours & multi-region&  same as Chuang \textit{et al}. \cite{chuang2000environment} & runtime includes data acquisition \\
+        \midrule                                                                    
+Frequency \cite{zhu2004frequency}                    & $O(k)$ & $ 4096$            & $5-10$ mins & multi-pixel & \makecell{Zongker \textit{et al}. \cite{zongker1999environment} + (color dispersion, \\ glossy reflection)} & slow data acquisition   \\
+        \midrule                                                                    
+Duan \textit{et al}. \cite{duan2011fast}             & $O(s\log (k^2/s))$ & $ 340$ & $2.8$ mins & multi-region&  same as Chuang \textit{et al}. \cite{chuang2000environment} & $s$ denotes the sparsity of a signal \\ %
+        \midrule                                                                    
+Qian \textit{et al}. \cite{qian2015frequency}        & $O(s\log (2k/s))$ & $ 400$  & $3.3$ mins & multi-pixel & same as Frequency \cite{zhu2004frequency} & $s$ denotes the sparsity of a signal\\
+        \bottomrule
+    \end{tabular}
+    }
+
