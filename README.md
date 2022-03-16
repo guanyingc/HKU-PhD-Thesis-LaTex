@@ -6,6 +6,8 @@ Title: Single View Analysis of Non-Lambertian Objects Based on Deep Learning
 Author: Guanying Chen  
 The University of Hong Kong, Pokfulam, Hong Kong, 2020.
 
+Overleaf Link: https://www.overleaf.com/read/qjqhttbhsnsb.
+
 ## Sample Pages
 The compiled PDF can be found in [https://guanyingc.github.io/papers/Chen_HKU_PhD_Thesis_2020.pdf](https://guanyingc.github.io/papers/Chen_HKU_PhD_Thesis_2020.pdf).
 
